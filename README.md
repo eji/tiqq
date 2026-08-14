@@ -8,6 +8,26 @@ typed result access.
 The prototype supports `InnerJoin` and `LeftJoin`. An inner join keeps both
 branches non-nullable; a left join makes columns from its right branch nullable.
 
+## Development environment
+
+Nix with flakes and direnv provide the Go 1.27 RC2 toolchain automatically:
+
+```sh
+direnv allow
+go version
+```
+
+The reported version must start with `go version go1.27rc2`.
+
+Common development commands are available through Make:
+
+```sh
+make test
+make fmt
+make vet
+make check
+```
+
 ```go
 j := UserTable.LeftJoin(
 	AddressTable,

@@ -23,6 +23,8 @@
             packages = [
               pkgs.go_1_27
               pkgs.gnumake
+              pkgs.gitleaks
+              pkgs.pre-commit
             ];
 
             shellHook = ''

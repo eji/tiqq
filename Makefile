@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help test fmt fmt-check vet check
+.PHONY: help test fmt fmt-check vet check hooks pre-commit secrets
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -18,3 +18,12 @@ vet: ## Run go vet
 	go vet ./...
 
 check: fmt-check vet test ## Run all checks
+
+hooks: ## Install the repository Git hooks
+	pre-commit install
+
+pre-commit: ## Run all pre-commit hooks against staged changes
+	pre-commit run
+
+secrets: ## Scan the complete Git history for secrets
+	gitleaks git --redact --verbose .

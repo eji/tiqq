@@ -28,6 +28,17 @@ make vet
 make check
 ```
 
+Install the repository Git hooks once after cloning:
+
+```sh
+make hooks
+```
+
+Commits then run Gitleaks against staged changes. Both `pre-commit` and
+`gitleaks` are supplied by the locked Nix development shell, and the hook uses
+the system executables without downloading another toolchain. To scan the full
+Git history manually, run `make secrets`.
+
 ```go
 j := UserTable.LeftJoin(
 	AddressTable,

@@ -20,6 +20,11 @@ func RequiredColumn[S, T any](table, name string) Column[S, T, T] {
 	return Column[S, T, T]{ref: columnRef{id: table + "." + name, qualifier: table, name: name}}
 }
 
+// NullableColumn constructs a schema-nullable column for generated code.
+func NullableColumn[S, T any](table, name string) Column[S, sql.Null[T], T] {
+	return Column[S, sql.Null[T], T]{ref: columnRef{id: table + "." + name, qualifier: table, name: name}}
+}
+
 // RebindRequired changes a column's predicate scope. Intended for generated joins.
 func RebindRequired[From, To, T any](c Column[From, T, T]) Column[To, T, T] {
 	return Column[To, T, T]{ref: c.ref}
@@ -27,6 +32,11 @@ func RebindRequired[From, To, T any](c Column[From, T, T]) Column[To, T, T] {
 
 // RebindNullable changes scope and makes an outer-joined column nullable.
 func RebindNullable[From, To, T any](c Column[From, T, T]) Column[To, sql.Null[T], T] {
+	return Column[To, sql.Null[T], T]{ref: c.ref}
+}
+
+// RebindExistingNullable preserves schema nullability while changing scope.
+func RebindExistingNullable[From, To, T any](c Column[From, sql.Null[T], T]) Column[To, sql.Null[T], T] {
 	return Column[To, sql.Null[T], T]{ref: c.ref}
 }
 

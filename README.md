@@ -63,5 +63,15 @@ toolchain. Execution remains owned by `database/sql`, pgx, or another adapter.
 
 The database-derived IR is in `schema`, and `introspect/postgres` fills it from
 `information_schema` without choosing a SQL driver. The sample generated API is
-in `example/schema`. A general-purpose generator CLI is intentionally deferred;
-the prototype currently proves the generated API and query/result type flow.
+in `example/schema`. `tiqq-gen` generates typed tables and unambiguous FK-based
+inner/left joins from Schema IR JSON:
+
+```sh
+go run ./cmd/tiqq-gen \
+  -schema schema.json \
+  -package dbschema \
+  -output internal/dbschema/schema_gen.go
+```
+
+Multiple relations from the same parent require an explicit relation API and
+are currently rejected instead of producing ambiguous Go methods.

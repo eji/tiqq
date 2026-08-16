@@ -2,7 +2,10 @@ module github.com/eji/tiqq
 
 go 1.27
 
-require github.com/stretchr/testify v1.11.1
+require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/stretchr/testify v1.11.1
+)
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect

@@ -13,6 +13,7 @@ type InsertQuery[S any, D InsertDialect] struct {
 	required   []string
 	uniqueKeys [][]string
 	conflict   *insertConflict[S]
+	duplicate  []Assignment[S]
 }
 
 type insertConflict[S any] struct {
@@ -83,7 +84,13 @@ func (query InsertQuery[S, D]) Build() (Statement, error) {
 			}
 		}
 	}
+	if query.conflict != nil && len(query.duplicate) > 0 {
+		return Statement{}, fmt.Errorf("tiqq: INSERT cannot combine ON CONFLICT and ON DUPLICATE KEY UPDATE")
+	}
 	if err := query.validateConflict(); err != nil {
+		return Statement{}, err
+	}
+	if err := query.validateDuplicateKey(); err != nil {
 		return Statement{}, err
 	}
 
@@ -114,8 +121,36 @@ func (query InsertQuery[S, D]) Build() (Statement, error) {
 		builder.WriteString(strings.Join(placeholders, ", "))
 		builder.WriteByte(')')
 	}
+	if len(query.duplicate) > 0 {
+		builder.WriteString(" AS ")
+		builder.WriteString(renderer.quoteIdentifier("tiqq_new"))
+	}
 	query.renderConflict(renderer, &builder, &args, &nextArg)
+	query.renderDuplicateKey(renderer, &builder, &args, &nextArg)
 	return newStatement(builder.String(), args, nil), nil
+}
+
+func (query InsertQuery[S, D]) renderDuplicateKey(renderer sqlRenderer, builder *strings.Builder, args *[]any, nextArg *int) {
+	if len(query.duplicate) == 0 {
+		return
+	}
+	builder.WriteString(" ON DUPLICATE KEY UPDATE ")
+	for index, assignment := range query.duplicate {
+		if index > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString(renderer.quoteIdentifier(assignment.column.name))
+		builder.WriteString(" = ")
+		if assignment.inserted {
+			builder.WriteString(renderer.quoteIdentifier("tiqq_new"))
+			builder.WriteByte('.')
+			builder.WriteString(renderer.quoteIdentifier(assignment.column.name))
+		} else {
+			builder.WriteString(renderer.placeholder(*nextArg))
+			*nextArg++
+			*args = append(*args, assignment.value)
+		}
+	}
 }
 
 func (query InsertQuery[S, D]) renderConflict(renderer sqlRenderer, builder *strings.Builder, args *[]any, nextArg *int) {
@@ -205,6 +240,32 @@ func (query InsertQuery[S, D]) validateConflict() error {
 	return nil
 }
 
+func (query InsertQuery[S, D]) validateDuplicateKey() error {
+	if query.duplicate == nil {
+		return nil
+	}
+	if len(query.duplicate) == 0 {
+		return fmt.Errorf("tiqq: ON DUPLICATE KEY UPDATE requires at least one assignment")
+	}
+	assigned := make(map[string]bool, len(query.duplicate))
+	for _, assignment := range query.duplicate {
+		if assignment.column.qualifier != query.table.qualifier() {
+			return fmt.Errorf("tiqq: ON DUPLICATE KEY assignment column %s is not in query scope", assignment.column.id)
+		}
+		if !query.insertable[assignment.column.name] {
+			return fmt.Errorf("tiqq: column %s is not insertable", assignment.column.id)
+		}
+		if assignment.excluded {
+			return fmt.Errorf("tiqq: ON DUPLICATE KEY UPDATE does not accept EXCLUDED assignments")
+		}
+		if assigned[assignment.column.name] {
+			return fmt.Errorf("tiqq: ON DUPLICATE KEY assignment column %s is specified more than once", assignment.column.id)
+		}
+		assigned[assignment.column.name] = true
+	}
+	return nil
+}
+
 func sameColumnSet(left, right map[string]bool) bool {
 	for column := range left {
 		if !right[column] {
@@ -241,6 +302,20 @@ func conflictColumns[S any](columns []ConflictColumn[S]) []columnRef {
 // ExcludedAssignment creates a PostgreSQL incoming-row assignment for dialect packages.
 func ExcludedAssignment[S any](column ConflictColumn[S]) Assignment[S] {
 	return Assignment[S]{column: column.conflictColumn(*new(S)), excluded: true}
+}
+
+// WithDuplicateKeyDoUpdate is intended for the MySQL dialect package.
+func WithDuplicateKeyDoUpdate[S any](query InsertQuery[S, MySQLMarker], values ...UpdateValue[S]) InsertQuery[S, MySQLMarker] {
+	query.duplicate = make([]Assignment[S], len(values))
+	for index, value := range values {
+		query.duplicate[index] = value.updateValue(*new(S))
+	}
+	return query
+}
+
+// InsertedAssignment creates a MySQL incoming-row assignment for the dialect package.
+func InsertedAssignment[S any](column ConflictColumn[S]) Assignment[S] {
+	return Assignment[S]{column: column.conflictColumn(*new(S)), inserted: true}
 }
 
 // MustBuild builds an INSERT statement and panics if validation fails.

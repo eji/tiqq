@@ -48,9 +48,15 @@ q := j.Where(
 	j.Right().Address,
 )
 
-stmt := q.Build()
+stmt, err := q.Build()
+if err != nil {
+	return err
+}
 rows, err := db.QueryContext(ctx, stmt.SQL(), stmt.Args()...)
 ```
+
+For a statically defined query that should fail fast during development, use
+`q.MustBuild()`; it panics with the same validation error.
 
 After an adapter scans values in projection order, result access preserves the
 column's generated type:

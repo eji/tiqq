@@ -3,9 +3,14 @@
 package schema
 
 type Schema struct {
-	Name   string
-	Tables []Table
+	Dialect Dialect
+	Name    string
+	Tables  []Table
 }
+
+type Dialect string
+
+const PostgreSQL Dialect = "postgresql"
 
 type Table struct {
 	Schema      string

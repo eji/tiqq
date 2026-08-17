@@ -12,8 +12,9 @@ type columnRef struct {
 	id        string
 	qualifier string
 	name      string
-	sql       string
 	aggregate bool
+	function  string
+	input     *columnRef
 }
 
 // Assignment is a type-safe UPDATE assignment for scope S.

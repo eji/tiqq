@@ -41,7 +41,7 @@ func TestIntrospect(t *testing.T) {
 
 	got, err := Introspect(context.Background(), database, "public")
 	defaultAddress := "'unknown'::text"
-	want := schema.Schema{Name: "public", Tables: []schema.Table{
+	want := schema.Schema{Dialect: schema.PostgreSQL, Name: "public", Tables: []schema.Table{
 		{
 			Schema: "public", Name: "addresses",
 			Columns: []schema.Column{

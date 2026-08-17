@@ -182,15 +182,24 @@ func (query Query) Select(columns ...Selection) Query {
 	return query
 }
 
-func (query Query) Build() Statement {
+func (query Query) Build() (Statement, error) {
 	if len(query.projections) == 0 {
-		panic("tiqq: SELECT requires at least one column")
+		return Statement{}, fmt.Errorf("tiqq: SELECT requires at least one column")
 	}
-	validateDistinctTableReferences(query.from.tables)
+	if len(query.from.tables) == 0 {
+		return Statement{}, fmt.Errorf("tiqq: query requires a source")
+	}
+	if err := validateDistinctTableReferences(query.from.tables); err != nil {
+		return Statement{}, err
+	}
 	allowed := queryAllowedColumns(query.from)
-	validateColumns("SELECT", query.projections, allowed)
+	if err := validateColumns("SELECT", query.projections, allowed); err != nil {
+		return Statement{}, err
+	}
 	for _, predicate := range query.predicates {
-		validateColumns("WHERE", predicateColumns(predicate), allowed)
+		if err := validateColumns("WHERE", predicateColumns(predicate), allowed); err != nil {
+			return Statement{}, err
+		}
 	}
 
 	var builder strings.Builder
@@ -215,13 +224,19 @@ func (query Query) Build() Statement {
 		renderTable(&builder, join.right.ref)
 		conditions := join.conditions
 		if len(conditions) == 0 {
-			conditions = inferJoinConditions(query.from.tables, visible, join.right)
+			var err error
+			conditions, err = inferJoinConditions(query.from.tables, visible, join.right)
+			if err != nil {
+				return Statement{}, err
+			}
 		}
 		joinAllowed := copySet(visible)
 		joinAllowed[join.right.ref.qualifier()] = true
 		builder.WriteString(" ON ")
 		for index, condition := range conditions {
-			validateColumns("ON", predicateColumns(condition), joinAllowed)
+			if err := validateColumns("ON", predicateColumns(condition), joinAllowed); err != nil {
+				return Statement{}, err
+			}
 			if index > 0 {
 				builder.WriteString(" AND ")
 			}
@@ -242,18 +257,28 @@ func (query Query) Build() Statement {
 			args = append(args, values...)
 		}
 	}
-	return newStatement(builder.String(), args, query.projections)
+	return newStatement(builder.String(), args, query.projections), nil
 }
 
-func validateDistinctTableReferences(tables []tableSource) {
+// MustBuild builds a statement and panics if validation fails.
+func (query Query) MustBuild() Statement {
+	statement, err := query.Build()
+	if err != nil {
+		panic(err)
+	}
+	return statement
+}
+
+func validateDistinctTableReferences(tables []tableSource) error {
 	seen := make(map[string]bool, len(tables))
 	for _, table := range tables {
 		qualifier := table.ref.qualifier()
 		if seen[qualifier] {
-			panic("tiqq: table aliases must be distinct")
+			return fmt.Errorf("tiqq: table aliases must be distinct")
 		}
 		seen[qualifier] = true
 	}
+	return nil
 }
 
 func renderTable(builder *strings.Builder, table TableRef) {
@@ -272,15 +297,16 @@ func queryAllowedColumns(from source) map[string]bool {
 	return allowed
 }
 
-func validateColumns(clause string, columns []columnRef, allowed map[string]bool) {
+func validateColumns(clause string, columns []columnRef, allowed map[string]bool) error {
 	for _, column := range columns {
 		if !allowed[column.qualifier] {
-			panic(fmt.Sprintf("tiqq: %s column %s is not in query scope", clause, column.id))
+			return fmt.Errorf("tiqq: %s column %s is not in query scope", clause, column.id)
 		}
 	}
+	return nil
 }
 
-func inferJoinConditions(tables []tableSource, visible map[string]bool, right tableSource) []Predicate {
+func inferJoinConditions(tables []tableSource, visible map[string]bool, right tableSource) ([]Predicate, error) {
 	var candidates [][]Predicate
 	for _, table := range tables {
 		if !visible[table.ref.qualifier()] {
@@ -290,12 +316,12 @@ func inferJoinConditions(tables []tableSource, visible map[string]bool, right ta
 		candidates = append(candidates, relationPredicateGroups(right, table)...)
 	}
 	if len(candidates) == 0 {
-		panic("tiqq: JOIN requires ON because no foreign key matches")
+		return nil, fmt.Errorf("tiqq: JOIN requires ON because no foreign key matches")
 	}
 	if len(candidates) > 1 {
-		panic("tiqq: JOIN requires ON because multiple foreign keys match")
+		return nil, fmt.Errorf("tiqq: JOIN requires ON because multiple foreign keys match")
 	}
-	return candidates[0]
+	return candidates[0], nil
 }
 
 func relationPredicateGroups(child, parent tableSource) [][]Predicate {

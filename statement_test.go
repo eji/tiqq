@@ -17,7 +17,7 @@ func (scanner scannerFunc) Scan(destinations ...any) error {
 
 func TestScanRow(t *testing.T) {
 	j := prototypeJoin()
-	stmt := j.Select(j.Left().ID, j.Right().Address).Build()
+	stmt := j.Select(j.Left().ID, j.Right().Address).MustBuild()
 	row, err := tiqq.ScanRow(scannerFunc(func(destinations ...any) error {
 		*destinations[0].(*any) = int64(7)
 		*destinations[1].(*any) = "Tokyo"
@@ -31,7 +31,7 @@ func TestScanRow(t *testing.T) {
 
 func TestScanRowPreservesNull(t *testing.T) {
 	j := prototypeJoin()
-	stmt := j.Select(j.Right().Address).Build()
+	stmt := j.Select(j.Right().Address).MustBuild()
 	row, err := tiqq.ScanRow(scannerFunc(func(destinations ...any) error {
 		*destinations[0].(*any) = nil
 		return nil
@@ -43,7 +43,7 @@ func TestScanRowPreservesNull(t *testing.T) {
 
 func TestScanRowConvertsDriverInteger(t *testing.T) {
 	j := prototypeJoin()
-	stmt := j.Select(j.Right().ID).Build()
+	stmt := j.Select(j.Right().ID).MustBuild()
 	row, err := tiqq.ScanRow(scannerFunc(func(destinations ...any) error {
 		*destinations[0].(*any) = int64(12)
 		return nil
@@ -55,7 +55,7 @@ func TestScanRowConvertsDriverInteger(t *testing.T) {
 
 func TestScanRowWrapsScannerError(t *testing.T) {
 	j := prototypeJoin()
-	stmt := j.Select(j.Left().ID).Build()
+	stmt := j.Select(j.Left().ID).MustBuild()
 	_, err := tiqq.ScanRow(scannerFunc(func(destinations ...any) error {
 		return errors.New("driver failure")
 	}), stmt)

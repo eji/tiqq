@@ -36,11 +36,12 @@ func TestBuild(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			stmt := j.
+			stmt, err := j.
 				Where(test.predicates...).
 				Select(j.Left().ID, j.Left().Name, j.Right().Address).
 				Build()
 
+			require.NoError(t, err)
 			require.Equal(t, test.wantSQL, stmt.SQL())
 			require.Equal(t, test.wantArgs, stmt.Args())
 		})
@@ -54,7 +55,7 @@ func TestInnerJoin(t *testing.T) {
 	stmt := j.
 		Where(j.Right().Address.Like("Tokyo%")).
 		Select(j.Left().ID, j.Right().Address).
-		Build()
+		MustBuild()
 	row, err := tiqq.NewRow(stmt, int64(100), "Tokyo")
 
 	require.Equal(
@@ -70,7 +71,7 @@ func TestInnerJoin(t *testing.T) {
 
 func TestLeftJoinInfersForeignKey(t *testing.T) {
 	j := UserTable.LeftJoin(AddressTable)
-	stmt := j.Select(j.Left().ID, j.Right().Address).Build()
+	stmt := j.Select(j.Left().ID, j.Right().Address).MustBuild()
 
 	require.Equal(
 		t,
@@ -87,7 +88,7 @@ func TestLeftJoinExplicitOnPredicates(t *testing.T) {
 	stmt := j.
 		Where(j.Left().ID.Eq(100)).
 		Select(j.Left().ID, j.Right().Message).
-		Build()
+		MustBuild()
 
 	require.Equal(
 		t,
@@ -99,39 +100,42 @@ func TestLeftJoinExplicitOnPredicates(t *testing.T) {
 
 func TestJoinBuildValidation(t *testing.T) {
 	tests := map[string]struct {
-		build     func()
-		wantPanic string
+		build func() error
+		want  string
 	}{
 		"missing foreign key requires ON": {
-			build: func() {
+			build: func() error {
 				joined := UserTable.LeftJoin(AuditLogTable)
-				joined.Select(joined.Left().ID).Build()
+				_, err := joined.Select(joined.Left().ID).Build()
+				return err
 			},
-			wantPanic: "tiqq: JOIN requires ON because no foreign key matches",
+			want: "tiqq: JOIN requires ON because no foreign key matches",
 		},
 		"ON rejects unrelated table": {
-			build: func() {
+			build: func() error {
 				joined := UserTable.LeftJoin(AuditLogTable).
 					On(tiqq.Or(
 						tiqq.Eq(CompanyTable.ID, AuditLogTable.ActorID),
 						AuditLogTable.Active.Eq(true),
 					))
-				joined.Select(joined.Left().ID).Build()
+				_, err := joined.Select(joined.Left().ID).Build()
+				return err
 			},
-			wantPanic: "tiqq: ON column companies.id is not in query scope",
+			want: "tiqq: ON column companies.id is not in query scope",
 		},
 		"SELECT rejects unrelated table": {
-			build: func() {
+			build: func() error {
 				joined := UserTable.LeftJoin(AddressTable)
-				joined.Select(CompanyTable.Name).Build()
+				_, err := joined.Select(CompanyTable.Name).Build()
+				return err
 			},
-			wantPanic: "tiqq: SELECT column companies.name is not in query scope",
+			want: "tiqq: SELECT column companies.name is not in query scope",
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			require.PanicsWithValue(t, test.wantPanic, test.build)
+			require.EqualError(t, test.build(), test.want)
 		})
 	}
 }
@@ -146,7 +150,7 @@ func TestMultiStageLeftJoin(t *testing.T) {
 			joined.Left().Right().Address,
 			joined.Right().Name,
 		).
-		Build()
+		MustBuild()
 	wantAddress := sql.Null[string]{V: "Tokyo", Valid: true}
 	wantCompany := sql.Null[string]{V: "Acme", Valid: true}
 	row, err := tiqq.NewRow(stmt, int64(100), wantAddress, wantCompany)
@@ -173,7 +177,7 @@ func TestMultiStageJoinWithExplicitOn(t *testing.T) {
 	stmt := joined.Select(
 		joined.Left().Left().Left().ID,
 		joined.Right().Message,
-	).Build()
+	).MustBuild()
 
 	require.Contains(
 		t,
@@ -186,7 +190,7 @@ func TestMultiStageJoinWithExplicitOn(t *testing.T) {
 func TestMultiStageInnerJoin(t *testing.T) {
 	userAddress := UserTable.LeftJoin(AddressTable)
 	joined := tiqq.InnerJoin(userAddress, CompanyTable)
-	stmt := joined.Select(joined.Left().Right().Address, joined.Right().Name).Build()
+	stmt := joined.Select(joined.Left().Right().Address, joined.Right().Name).MustBuild()
 	wantAddress := sql.Null[string]{V: "Tokyo", Valid: true}
 	row, err := tiqq.NewRow(stmt, wantAddress, "Acme")
 
@@ -203,7 +207,7 @@ func TestSelfJoinWithAliases(t *testing.T) {
 	stmt := j.
 		Where(j.Left().Name.Like("A%")).
 		Select(j.Left().ID, j.Left().Name, j.Right().Name).
-		Build()
+		MustBuild()
 	wantManager := sql.Null[string]{V: "Bob", Valid: true}
 	row, err := tiqq.NewRow(stmt, int64(1), "Alice", wantManager)
 
@@ -219,30 +223,16 @@ func TestSelfJoinWithAliases(t *testing.T) {
 	require.Equal(t, wantManager, row.Get(j.Right().Name))
 }
 
-func TestSelfJoinAliasValidation(t *testing.T) {
-	tests := map[string]struct {
-		run       func()
-		wantPanic string
-	}{
-		"empty alias": {
-			run:       func() { UserTable.As("") },
-			wantPanic: "tiqq: table alias must not be empty",
-		},
-		"duplicate alias": {
-			run: func() {
-				left := UserTable.As("user")
-				right := UserTable.As("user")
-				left.LeftJoin(right).Select(left.ID).Build()
-			},
-			wantPanic: "tiqq: table aliases must be distinct",
-		},
-	}
+func TestEmptyAliasPanics(t *testing.T) {
+	require.PanicsWithValue(t, "tiqq: table alias must not be empty", func() { UserTable.As("") })
+}
 
-	for name, test := range tests {
-		t.Run(name, func(t *testing.T) {
-			require.PanicsWithValue(t, test.wantPanic, test.run)
-		})
-	}
+func TestDuplicateAliasBuildValidation(t *testing.T) {
+	left := UserTable.As("user")
+	right := UserTable.As("user")
+	_, err := left.LeftJoin(right).Select(left.ID).Build()
+
+	require.EqualError(t, err, "tiqq: table aliases must be distinct")
 }
 
 func TestPredicateOperators(t *testing.T) {
@@ -263,7 +253,7 @@ func TestPredicateOperators(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			stmt := j.Select(j.Left().ID).Where(test.predicate).Build()
+			stmt := j.Select(j.Left().ID).Where(test.predicate).MustBuild()
 			require.Contains(t, stmt.SQL(), " WHERE "+test.wantSQL)
 			require.Equal(t, []any{test.wantArg}, stmt.Args())
 		})
@@ -314,7 +304,7 @@ func TestPredicateExpressions(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			stmt := j.Select(j.Left().ID).Where(test.predicate).Build()
+			stmt := j.Select(j.Left().ID).Where(test.predicate).MustBuild()
 			require.Contains(t, stmt.SQL(), " WHERE "+test.wantSQL)
 			require.Equal(t, test.wantArgs, stmt.Args())
 		})
@@ -337,7 +327,7 @@ func TestColumnComparisonOperators(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			joined := UserTable.LeftJoin(AddressTable).On(test.predicate)
-			stmt := joined.Select(joined.Left().ID).Build()
+			stmt := joined.Select(joined.Left().ID).MustBuild()
 			require.Contains(t, stmt.SQL(), " ON "+test.wantSQL)
 		})
 	}
@@ -351,7 +341,7 @@ func TestPredicateExpressionsInOn(t *testing.T) {
 			AuditLogTable.Message.Like("security:%"),
 		),
 	)
-	stmt := j.Select(j.Left().ID).Where(j.Left().ID.In(10, 20)).Build()
+	stmt := j.Select(j.Left().ID).Where(j.Left().ID.In(10, 20)).MustBuild()
 
 	require.Contains(
 		t,
@@ -393,7 +383,7 @@ func TestPredicateExpressionValidation(t *testing.T) {
 
 func TestTypedRowGet(t *testing.T) {
 	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
-	stmt := j.Select(j.Left().ID, j.Left().Name, j.Right().Address).Build()
+	stmt := j.Select(j.Left().ID, j.Left().Name, j.Right().Address).MustBuild()
 	wantAddress := sql.Null[string]{V: "Tokyo", Valid: true}
 	row, err := tiqq.NewRow(stmt, int64(100), "Alice", wantAddress)
 
@@ -411,7 +401,7 @@ func TestRowValidation(t *testing.T) {
 	}{
 		"column is absent from projection": {
 			run: func() {
-				stmt := j.Select(j.Left().ID).Build()
+				stmt := j.Select(j.Left().ID).MustBuild()
 				row, err := tiqq.NewRow(stmt, int64(1))
 				require.NoError(t, err)
 				row.Get(j.Left().Name)
@@ -420,7 +410,7 @@ func TestRowValidation(t *testing.T) {
 		},
 		"driver value has wrong type": {
 			run: func() {
-				stmt := j.Select(j.Left().ID).Build()
+				stmt := j.Select(j.Left().ID).MustBuild()
 				row, err := tiqq.NewRow(stmt, "not an int64")
 				require.NoError(t, err)
 				row.Get(j.Left().ID)
@@ -438,7 +428,7 @@ func TestRowValidation(t *testing.T) {
 
 func TestNewRowRejectsProjectionLengthMismatch(t *testing.T) {
 	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
-	stmt := j.Select(j.Left().ID, j.Left().Name).Build()
+	stmt := j.Select(j.Left().ID, j.Left().Name).MustBuild()
 	_, err := tiqq.NewRow(stmt, int64(1))
 
 	require.EqualError(t, err, "tiqq: got 1 values for 2 projected columns")
@@ -446,16 +436,22 @@ func TestNewRowRejectsProjectionLengthMismatch(t *testing.T) {
 
 func TestBuildRequiresProjection(t *testing.T) {
 	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
-	require.PanicsWithValue(
-		t,
-		"tiqq: SELECT requires at least one column",
-		func() { j.Where(j.Left().ID.Eq(1)).Build() },
-	)
+	_, err := j.Where(j.Left().ID.Eq(1)).Build()
+
+	require.EqualError(t, err, "tiqq: SELECT requires at least one column")
+}
+
+func TestMustBuildPanicsOnValidationError(t *testing.T) {
+	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
+
+	require.PanicsWithError(t, "tiqq: SELECT requires at least one column", func() {
+		j.Where(j.Left().ID.Eq(1)).MustBuild()
+	})
 }
 
 func TestStatementArgsReturnsCopy(t *testing.T) {
 	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
-	stmt := j.Select(j.Left().ID).Where(j.Left().ID.Eq(1)).Build()
+	stmt := j.Select(j.Left().ID).Where(j.Left().ID.Eq(1)).MustBuild()
 	args := stmt.Args()
 	args[0] = int64(999)
 
@@ -467,6 +463,6 @@ func TestQueryIsImmutable(t *testing.T) {
 	base := j.Select(j.Left().ID)
 	filtered := base.Where(j.Left().ID.Eq(1))
 
-	require.NotContains(t, base.Build().SQL(), " WHERE ")
-	require.Contains(t, filtered.Build().SQL(), ` WHERE "users"."id" = $1`)
+	require.NotContains(t, base.MustBuild().SQL(), " WHERE ")
+	require.Contains(t, filtered.MustBuild().SQL(), ` WHERE "users"."id" = $1`)
 }

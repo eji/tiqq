@@ -12,8 +12,9 @@ type AddressScope struct{}
 type UserAddressScope struct{}
 
 type UserTableDef struct {
-	ID   tiqq.Column[UserScope, int64, int64]
-	Name tiqq.Column[UserScope, string, string]
+	ID        tiqq.Column[UserScope, int64, int64]
+	Name      tiqq.Column[UserScope, string, string]
+	ManagerID tiqq.Column[UserScope, sql.Null[int64], int64]
 }
 
 type AddressTableDef struct {
@@ -23,8 +24,9 @@ type AddressTableDef struct {
 }
 
 var UserTable = UserTableDef{
-	ID:   tiqq.RequiredColumn[UserScope, int64]("users", "id"),
-	Name: tiqq.RequiredColumn[UserScope, string]("users", "name"),
+	ID:        tiqq.RequiredColumn[UserScope, int64]("users", "id"),
+	Name:      tiqq.RequiredColumn[UserScope, string]("users", "name"),
+	ManagerID: tiqq.NullableColumn[UserScope, int64]("users", "manager_id"),
 }
 
 var AddressTable = AddressTableDef{
@@ -34,8 +36,9 @@ var AddressTable = AddressTableDef{
 }
 
 type joinedUserView struct {
-	ID   tiqq.Column[UserAddressScope, int64, int64]
-	Name tiqq.Column[UserAddressScope, string, string]
+	ID        tiqq.Column[UserAddressScope, int64, int64]
+	Name      tiqq.Column[UserAddressScope, string, string]
+	ManagerID tiqq.Column[UserAddressScope, sql.Null[int64], int64]
 }
 
 type UserAddressJoin struct {
@@ -65,8 +68,9 @@ type UserAddressInnerJoin struct {
 func (t UserTableDef) LeftJoin(right AddressTableDef, on tiqq.JoinCondition) UserAddressJoin {
 	return UserAddressJoin{
 		left: joinedUserView{
-			ID:   tiqq.RebindRequired[UserScope, UserAddressScope](t.ID),
-			Name: tiqq.RebindRequired[UserScope, UserAddressScope](t.Name),
+			ID:        tiqq.RebindRequired[UserScope, UserAddressScope](t.ID),
+			Name:      tiqq.RebindRequired[UserScope, UserAddressScope](t.Name),
+			ManagerID: tiqq.RebindExistingNullable[UserScope, UserAddressScope](t.ManagerID),
 		},
 		right: nullableAddressView{
 			ID:      tiqq.RebindNullable[AddressScope, UserAddressScope](right.ID),
@@ -80,8 +84,9 @@ func (t UserTableDef) LeftJoin(right AddressTableDef, on tiqq.JoinCondition) Use
 func (t UserTableDef) InnerJoin(right AddressTableDef, on tiqq.JoinCondition) UserAddressInnerJoin {
 	return UserAddressInnerJoin{
 		left: joinedUserView{
-			ID:   tiqq.RebindRequired[UserScope, UserAddressScope](t.ID),
-			Name: tiqq.RebindRequired[UserScope, UserAddressScope](t.Name),
+			ID:        tiqq.RebindRequired[UserScope, UserAddressScope](t.ID),
+			Name:      tiqq.RebindRequired[UserScope, UserAddressScope](t.Name),
+			ManagerID: tiqq.RebindExistingNullable[UserScope, UserAddressScope](t.ManagerID),
 		},
 		right: joinedAddressView{
 			ID:      tiqq.RebindRequired[AddressScope, UserAddressScope](right.ID),
@@ -112,4 +117,67 @@ func (j UserAddressInnerJoin) Where(predicates ...tiqq.Predicate[UserAddressScop
 
 func (j UserAddressInnerJoin) Select(columns ...tiqq.Selection[UserAddressScope]) tiqq.Query[UserAddressScope] {
 	return tiqq.NewQuery[UserAddressScope](j.source).Select(columns...)
+}
+
+type UserAliasScope struct{}
+type UserSelfJoinScope struct{}
+
+type UserAliasTableDef struct {
+	alias     string
+	ID        tiqq.Column[UserAliasScope, int64, int64]
+	Name      tiqq.Column[UserAliasScope, string, string]
+	ManagerID tiqq.Column[UserAliasScope, sql.Null[int64], int64]
+}
+
+func (table UserTableDef) As(alias string) UserAliasTableDef {
+	return UserAliasTableDef{
+		alias:     alias,
+		ID:        tiqq.AliasColumn[UserScope, UserAliasScope](table.ID, alias),
+		Name:      tiqq.AliasColumn[UserScope, UserAliasScope](table.Name, alias),
+		ManagerID: tiqq.AliasColumn[UserScope, UserAliasScope](table.ManagerID, alias),
+	}
+}
+
+type selfJoinedUserView struct {
+	ID        tiqq.Column[UserSelfJoinScope, int64, int64]
+	Name      tiqq.Column[UserSelfJoinScope, string, string]
+	ManagerID tiqq.Column[UserSelfJoinScope, sql.Null[int64], int64]
+}
+
+type nullableSelfJoinedUserView struct {
+	ID        tiqq.Column[UserSelfJoinScope, sql.Null[int64], int64]
+	Name      tiqq.Column[UserSelfJoinScope, sql.Null[string], string]
+	ManagerID tiqq.Column[UserSelfJoinScope, sql.Null[int64], int64]
+}
+
+type UserSelfLeftJoin struct {
+	left   selfJoinedUserView
+	right  nullableSelfJoinedUserView
+	source tiqq.Source
+}
+
+func (left UserAliasTableDef) LeftJoin(right UserAliasTableDef, on tiqq.JoinCondition) UserSelfLeftJoin {
+	tiqq.RequireDistinctAliases(left.alias, right.alias)
+	return UserSelfLeftJoin{
+		left: selfJoinedUserView{
+			ID:        tiqq.RebindRequired[UserAliasScope, UserSelfJoinScope](left.ID),
+			Name:      tiqq.RebindRequired[UserAliasScope, UserSelfJoinScope](left.Name),
+			ManagerID: tiqq.RebindExistingNullable[UserAliasScope, UserSelfJoinScope](left.ManagerID),
+		},
+		right: nullableSelfJoinedUserView{
+			ID:        tiqq.RebindNullable[UserAliasScope, UserSelfJoinScope](right.ID),
+			Name:      tiqq.RebindNullable[UserAliasScope, UserSelfJoinScope](right.Name),
+			ManagerID: tiqq.RebindExistingNullable[UserAliasScope, UserSelfJoinScope](right.ManagerID),
+		},
+		source: tiqq.NewAliasedLeftJoinSource("users", left.alias, "users", right.alias, on),
+	}
+}
+
+func (join UserSelfLeftJoin) Left() selfJoinedUserView          { return join.left }
+func (join UserSelfLeftJoin) Right() nullableSelfJoinedUserView { return join.right }
+func (join UserSelfLeftJoin) Where(predicates ...tiqq.Predicate[UserSelfJoinScope]) tiqq.Query[UserSelfJoinScope] {
+	return tiqq.NewQuery[UserSelfJoinScope](join.source).Where(predicates...)
+}
+func (join UserSelfLeftJoin) Select(columns ...tiqq.Selection[UserSelfJoinScope]) tiqq.Query[UserSelfJoinScope] {
+	return tiqq.NewQuery[UserSelfJoinScope](join.source).Select(columns...)
 }

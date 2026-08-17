@@ -40,13 +40,58 @@ func Generate(database schema.Schema, config Config) ([]byte, error) {
 		writeTable(&output, table)
 	}
 	for _, relation := range relations {
-		writeRelation(&output, relation.parent, relation.child)
+		if relation.parent.Name == relation.child.Name {
+			writeSelfRelation(&output, relation.parent)
+		} else {
+			writeRelation(&output, relation.parent, relation.child)
+		}
 	}
 	formatted, err := format.Source(output.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("codegen: format generated source: %w", err)
 	}
 	return formatted, nil
+}
+
+func writeSelfRelation(output *bytes.Buffer, table schema.Table) {
+	tableName := exported(singular(table.Name))
+	aliasScope := tableName + "AliasScope"
+	joinScope := tableName + "SelfJoinScope"
+	fmt.Fprintf(output, "type %s struct{}\ntype %s struct{}\n\n", aliasScope, joinScope)
+	fmt.Fprintf(output, "type %sAliasTableDef struct {\n\talias string\n", tableName)
+	for _, column := range table.Columns {
+		fmt.Fprintf(output, "\t%s %s\n", exported(column.Name), columnType(aliasScope, column, false))
+	}
+	output.WriteString("}\n\n")
+	fmt.Fprintf(output, "func (table %sTableDef) As(alias string) %sAliasTableDef {\n", tableName, tableName)
+	fmt.Fprintf(output, "return %sAliasTableDef{alias: alias,\n", tableName)
+	for _, column := range table.Columns {
+		fmt.Fprintf(output, "\t%s: tiqq.AliasColumn[%sScope, %s](table.%s, alias),\n", exported(column.Name), tableName, aliasScope, exported(column.Name))
+	}
+	output.WriteString("}\n}\n\n")
+	writeView(output, "selfJoined"+tableName+"View", joinScope, table, false)
+	writeView(output, "nullableSelfJoined"+tableName+"View", joinScope, table, true)
+	fmt.Fprintf(output, "type %sSelfInnerJoin struct { left selfJoined%sView; right selfJoined%sView; source tiqq.Source }\n", tableName, tableName, tableName)
+	fmt.Fprintf(output, "type %sSelfLeftJoin struct { left selfJoined%sView; right nullableSelfJoined%sView; source tiqq.Source }\n\n", tableName, tableName, tableName)
+	writeSelfJoinConstructor(output, tableName, aliasScope, joinScope, table, "Inner", false)
+	writeSelfJoinConstructor(output, tableName, aliasScope, joinScope, table, "Left", true)
+	writeJoinMethods(output, tableName+"SelfInnerJoin", "selfJoined"+tableName+"View", "selfJoined"+tableName+"View", joinScope)
+	writeJoinMethods(output, tableName+"SelfLeftJoin", "selfJoined"+tableName+"View", "nullableSelfJoined"+tableName+"View", joinScope)
+}
+
+func writeSelfJoinConstructor(output *bytes.Buffer, tableName, aliasScope, joinScope string, table schema.Table, kind string, outer bool) {
+	joinType := tableName + "Self" + kind + "Join"
+	fmt.Fprintf(output, "func (left %sAliasTableDef) %sJoin(right %sAliasTableDef, on tiqq.JoinCondition) %s {\n", tableName, kind, tableName, joinType)
+	output.WriteString("tiqq.RequireDistinctAliases(left.alias, right.alias)\n")
+	fmt.Fprintf(output, "return %s{left: selfJoined%sView{\n", joinType, tableName)
+	writeRebindings(output, "left", aliasScope, joinScope, table, false)
+	rightView := "selfJoined" + tableName + "View"
+	if outer {
+		rightView = "nullableSelfJoined" + tableName + "View"
+	}
+	fmt.Fprintf(output, "}, right: %s{\n", rightView)
+	writeRebindings(output, "right", aliasScope, joinScope, table, outer)
+	fmt.Fprintf(output, "}, source: tiqq.NewAliased%sJoinSource(%q, left.alias, %q, right.alias, on)}\n}\n\n", kind, table.Name, table.Name)
 }
 
 func usesNullable(tables []schema.Table) bool {

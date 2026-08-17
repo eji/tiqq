@@ -68,6 +68,31 @@ name    := row.Get(j.Left().Name)     // string
 address := row.Get(j.Right().Address) // sql.Null[string]
 ```
 
+Self joins require explicit aliases so SQL qualifiers and projection identities
+remain distinct:
+
+```go
+employee := UserTable.As("employee")
+manager := UserTable.As("manager")
+
+j := employee.LeftJoin(
+	manager,
+	tiqq.On(employee.ManagerID, manager.ID),
+)
+
+q := j.Select(
+	j.Left().Name,
+	j.Right().Name,
+)
+
+employeeName := row.Get(j.Left().Name)  // string
+managerName := row.Get(j.Right().Name)  // sql.Null[string]
+```
+
+The generator emits `As`, `InnerJoin`, and `LeftJoin` alias APIs for
+self-referencing foreign keys. Empty or duplicate aliases are rejected before
+SQL is built.
+
 This prototype intentionally requires Go 1.27 generic methods. At the time of
 writing, Go 1.27 is not yet generally released, so use a Go 1.27 prerelease
 toolchain. Execution remains owned by `database/sql`, pgx, or another adapter.

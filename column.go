@@ -14,6 +14,27 @@ type columnRef struct {
 	name      string
 }
 
+// AliasColumn rebinds a column to an explicitly named table instance. The
+// alias becomes part of both its SQL qualifier and projection identity.
+func AliasColumn[From, To, V, C any](column Column[From, V, C], alias string) Column[To, V, C] {
+	if alias == "" {
+		panic("tiqq: table alias must not be empty")
+	}
+	return Column[To, V, C]{ref: columnRef{
+		id:        alias + "." + column.ref.name,
+		qualifier: alias,
+		name:      column.ref.name,
+	}}
+}
+
+// RequireDistinctAliases rejects an ambiguous self join. Intended for
+// generated alias join methods.
+func RequireDistinctAliases(left, right string) {
+	if left == right {
+		panic("tiqq: self join aliases must be distinct")
+	}
+}
+
 // RequiredColumn constructs a non-nullable column. It is primarily intended
 // for generated code.
 func RequiredColumn[S, T any](table, name string) Column[S, T, T] {

@@ -44,14 +44,23 @@ func (table AddressTableDef) TiqqTableInfo() tiqq.TableInfo[AddressTableDef, Nul
 	}, []tiqq.ForeignKey{{Columns: []string{"user_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}}, {Columns: []string{"company_id"}, ReferencedTable: "companies", ReferencedColumns: []string{"id"}}})
 }
 
-func (table AddressTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[AddressTableDef] {
+func (table AddressTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[AddressTableDef, NullableAddressTableDef] {
 	return tiqq.TableJoinSource(table.TiqqTableInfo())
 }
-func (table AddressTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AddressTableDef, NC] {
+func (table AddressTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AddressTableDef, NC, NullableAddressTableDef, NC] {
 	return tiqq.LeftJoin(table, right)
 }
-func (table AddressTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AddressTableDef, C] {
+func (table AddressTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AddressTableDef, C, NullableAddressTableDef, NC] {
 	return tiqq.InnerJoin(table, right)
+}
+func (table AddressTableDef) RightJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[NullableAddressTableDef, C, NullableAddressTableDef, NC] {
+	return tiqq.RightJoin(table, right)
+}
+func (table AddressTableDef) FullJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[NullableAddressTableDef, NC, NullableAddressTableDef, NC] {
+	return tiqq.FullJoin(table, right)
+}
+func (table AddressTableDef) CrossJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AddressTableDef, C, NullableAddressTableDef, NC] {
+	return tiqq.CrossJoin(table, right)
 }
 func (table AddressTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 	return tiqq.NewTableQuery(table).Where(predicates...)
@@ -114,14 +123,23 @@ func (table AuditLogTableDef) TiqqTableInfo() tiqq.TableInfo[AuditLogTableDef, N
 	}, []tiqq.ForeignKey{})
 }
 
-func (table AuditLogTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[AuditLogTableDef] {
+func (table AuditLogTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[AuditLogTableDef, NullableAuditLogTableDef] {
 	return tiqq.TableJoinSource(table.TiqqTableInfo())
 }
-func (table AuditLogTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AuditLogTableDef, NC] {
+func (table AuditLogTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AuditLogTableDef, NC, NullableAuditLogTableDef, NC] {
 	return tiqq.LeftJoin(table, right)
 }
-func (table AuditLogTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AuditLogTableDef, C] {
+func (table AuditLogTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AuditLogTableDef, C, NullableAuditLogTableDef, NC] {
 	return tiqq.InnerJoin(table, right)
+}
+func (table AuditLogTableDef) RightJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[NullableAuditLogTableDef, C, NullableAuditLogTableDef, NC] {
+	return tiqq.RightJoin(table, right)
+}
+func (table AuditLogTableDef) FullJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[NullableAuditLogTableDef, NC, NullableAuditLogTableDef, NC] {
+	return tiqq.FullJoin(table, right)
+}
+func (table AuditLogTableDef) CrossJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AuditLogTableDef, C, NullableAuditLogTableDef, NC] {
+	return tiqq.CrossJoin(table, right)
 }
 func (table AuditLogTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 	return tiqq.NewTableQuery(table).Where(predicates...)
@@ -176,14 +194,23 @@ func (table CompanyTableDef) TiqqTableInfo() tiqq.TableInfo[CompanyTableDef, Nul
 	}, []tiqq.ForeignKey{})
 }
 
-func (table CompanyTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[CompanyTableDef] {
+func (table CompanyTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[CompanyTableDef, NullableCompanyTableDef] {
 	return tiqq.TableJoinSource(table.TiqqTableInfo())
 }
-func (table CompanyTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[CompanyTableDef, NC] {
+func (table CompanyTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[CompanyTableDef, NC, NullableCompanyTableDef, NC] {
 	return tiqq.LeftJoin(table, right)
 }
-func (table CompanyTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[CompanyTableDef, C] {
+func (table CompanyTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[CompanyTableDef, C, NullableCompanyTableDef, NC] {
 	return tiqq.InnerJoin(table, right)
+}
+func (table CompanyTableDef) RightJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[NullableCompanyTableDef, C, NullableCompanyTableDef, NC] {
+	return tiqq.RightJoin(table, right)
+}
+func (table CompanyTableDef) FullJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[NullableCompanyTableDef, NC, NullableCompanyTableDef, NC] {
+	return tiqq.FullJoin(table, right)
+}
+func (table CompanyTableDef) CrossJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[CompanyTableDef, C, NullableCompanyTableDef, NC] {
+	return tiqq.CrossJoin(table, right)
 }
 func (table CompanyTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 	return tiqq.NewTableQuery(table).Where(predicates...)
@@ -240,14 +267,23 @@ func (table UserTableDef) TiqqTableInfo() tiqq.TableInfo[UserTableDef, NullableU
 	}, []tiqq.ForeignKey{{Columns: []string{"manager_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}}})
 }
 
-func (table UserTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[UserTableDef] {
+func (table UserTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[UserTableDef, NullableUserTableDef] {
 	return tiqq.TableJoinSource(table.TiqqTableInfo())
 }
-func (table UserTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[UserTableDef, NC] {
+func (table UserTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[UserTableDef, NC, NullableUserTableDef, NC] {
 	return tiqq.LeftJoin(table, right)
 }
-func (table UserTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[UserTableDef, C] {
+func (table UserTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[UserTableDef, C, NullableUserTableDef, NC] {
 	return tiqq.InnerJoin(table, right)
+}
+func (table UserTableDef) RightJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[NullableUserTableDef, C, NullableUserTableDef, NC] {
+	return tiqq.RightJoin(table, right)
+}
+func (table UserTableDef) FullJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[NullableUserTableDef, NC, NullableUserTableDef, NC] {
+	return tiqq.FullJoin(table, right)
+}
+func (table UserTableDef) CrossJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[UserTableDef, C, NullableUserTableDef, NC] {
+	return tiqq.CrossJoin(table, right)
 }
 func (table UserTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 	return tiqq.NewTableQuery(table).Where(predicates...)

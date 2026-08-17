@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func prototypeJoin() tiqq.Joined[UserTableDef, NullableAddressTableDef] {
+func prototypeJoin() tiqq.Joined[UserTableDef, NullableAddressTableDef, NullableUserTableDef, NullableAddressTableDef] {
 	return UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 }
 

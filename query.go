@@ -58,21 +58,23 @@ type TableLike[C, NC any] interface {
 	TiqqTableInfo() TableInfo[C, NC]
 }
 
-// JoinSourceInfo carries the concrete left branch and its SQL source.
-type JoinSourceInfo[C any] struct {
-	columns C
-	source  source
+// JoinSourceInfo carries the concrete and fully nullable column views of a
+// query source. RIGHT and FULL JOIN use the nullable view for the left branch.
+type JoinSourceInfo[C, NC any] struct {
+	columns  C
+	nullable NC
+	source   source
 }
 
 // JoinSource is implemented by generated tables and Joined trees.
-type JoinSource[C any] interface {
-	TiqqJoinSource() JoinSourceInfo[C]
+type JoinSource[C, NC any] interface {
+	TiqqJoinSource() JoinSourceInfo[C, NC]
 }
 
-func TableJoinSource[C, NC any](table TableInfo[C, NC]) JoinSourceInfo[C] {
-	return JoinSourceInfo[C]{
-		columns: table.required,
-		source:  source{tables: []tableSource{tableSourceOf(table)}},
+func TableJoinSource[C, NC any](table TableInfo[C, NC]) JoinSourceInfo[C, NC] {
+	return JoinSourceInfo[C, NC]{
+		columns: table.required, nullable: table.nullable,
+		source: source{tables: []tableSource{tableSourceOf(table)}},
 	}
 }
 
@@ -92,22 +94,32 @@ type joinClause struct {
 	conditions []Predicate
 }
 
-// Joined is a binary typed JOIN tree.
-type Joined[L, R any] struct {
-	left   L
-	right  R
-	source source
+// Joined is a binary typed JOIN tree. NL and NR are the fully nullable views
+// of its branches, used when a later RIGHT or FULL JOIN null-extends the tree.
+type Joined[L, R, NL, NR any] struct {
+	left          L
+	right         R
+	nullableLeft  NL
+	nullableRight NR
+	source        source
 }
 
-func (joined Joined[L, R]) Left() L  { return joined.left }
-func (joined Joined[L, R]) Right() R { return joined.right }
+func (joined Joined[L, R, NL, NR]) Left() L  { return joined.left }
+func (joined Joined[L, R, NL, NR]) Right() R { return joined.right }
 
-func (joined Joined[L, R]) TiqqJoinSource() JoinSourceInfo[Joined[L, R]] {
-	return JoinSourceInfo[Joined[L, R]]{columns: joined, source: joined.source}
+func (joined Joined[L, R, NL, NR]) TiqqJoinSource() JoinSourceInfo[Joined[L, R, NL, NR], Joined[NL, NR, NL, NR]] {
+	nullable := Joined[NL, NR, NL, NR]{
+		left: joined.nullableLeft, right: joined.nullableRight,
+		nullableLeft: joined.nullableLeft, nullableRight: joined.nullableRight,
+		source: joined.source,
+	}
+	return JoinSourceInfo[Joined[L, R, NL, NR], Joined[NL, NR, NL, NR]]{
+		columns: joined, nullable: nullable, source: joined.source,
+	}
 }
 
 // On replaces the inferred condition of the most recently added JOIN.
-func (joined Joined[L, R]) On(conditions ...Predicate) Joined[L, R] {
+func (joined Joined[L, R, NL, NR]) On(conditions ...Predicate) Joined[L, R, NL, NR] {
 	if len(joined.source.joins) == 0 {
 		panic("tiqq: ON requires a JOIN")
 	}
@@ -117,25 +129,63 @@ func (joined Joined[L, R]) On(conditions ...Predicate) Joined[L, R] {
 	return joined
 }
 
-func LeftJoin[LC, RC, RNC any, LT JoinSource[LC], RT TableLike[RC, RNC]](
+func LeftJoin[LC, LNC, RC, RNC any, LT JoinSource[LC, LNC], RT TableLike[RC, RNC]](
 	left LT,
 	right RT,
-) Joined[LC, RNC] {
+) Joined[LC, RNC, LNC, RNC] {
 	leftInfo, rightInfo := left.TiqqJoinSource(), right.TiqqTableInfo()
-	return Joined[LC, RNC]{
+	return Joined[LC, RNC, LNC, RNC]{
 		left: leftInfo.columns, right: rightInfo.nullable,
+		nullableLeft: leftInfo.nullable, nullableRight: rightInfo.nullable,
 		source: leftInfo.source.withJoin("LEFT JOIN", tableSourceOf(rightInfo)),
 	}
 }
 
-func InnerJoin[LC, RC, RNC any, LT JoinSource[LC], RT TableLike[RC, RNC]](
+func InnerJoin[LC, LNC, RC, RNC any, LT JoinSource[LC, LNC], RT TableLike[RC, RNC]](
 	left LT,
 	right RT,
-) Joined[LC, RC] {
+) Joined[LC, RC, LNC, RNC] {
 	leftInfo, rightInfo := left.TiqqJoinSource(), right.TiqqTableInfo()
-	return Joined[LC, RC]{
+	return Joined[LC, RC, LNC, RNC]{
 		left: leftInfo.columns, right: rightInfo.required,
+		nullableLeft: leftInfo.nullable, nullableRight: rightInfo.nullable,
 		source: leftInfo.source.withJoin("INNER JOIN", tableSourceOf(rightInfo)),
+	}
+}
+
+func RightJoin[LC, LNC, RC, RNC any, LT JoinSource[LC, LNC], RT TableLike[RC, RNC]](
+	left LT,
+	right RT,
+) Joined[LNC, RC, LNC, RNC] {
+	leftInfo, rightInfo := left.TiqqJoinSource(), right.TiqqTableInfo()
+	return Joined[LNC, RC, LNC, RNC]{
+		left: leftInfo.nullable, right: rightInfo.required,
+		nullableLeft: leftInfo.nullable, nullableRight: rightInfo.nullable,
+		source: leftInfo.source.withJoin("RIGHT JOIN", tableSourceOf(rightInfo)),
+	}
+}
+
+func FullJoin[LC, LNC, RC, RNC any, LT JoinSource[LC, LNC], RT TableLike[RC, RNC]](
+	left LT,
+	right RT,
+) Joined[LNC, RNC, LNC, RNC] {
+	leftInfo, rightInfo := left.TiqqJoinSource(), right.TiqqTableInfo()
+	return Joined[LNC, RNC, LNC, RNC]{
+		left: leftInfo.nullable, right: rightInfo.nullable,
+		nullableLeft: leftInfo.nullable, nullableRight: rightInfo.nullable,
+		source: leftInfo.source.withJoin("FULL JOIN", tableSourceOf(rightInfo)),
+	}
+}
+
+func CrossJoin[LC, LNC, RC, RNC any, LT JoinSource[LC, LNC], RT TableLike[RC, RNC]](
+	left LT,
+	right RT,
+) Joined[LC, RC, LNC, RNC] {
+	leftInfo, rightInfo := left.TiqqJoinSource(), right.TiqqTableInfo()
+	return Joined[LC, RC, LNC, RNC]{
+		left: leftInfo.columns, right: rightInfo.required,
+		nullableLeft: leftInfo.nullable, nullableRight: rightInfo.nullable,
+		source: leftInfo.source.withJoin("CROSS JOIN", tableSourceOf(rightInfo)),
 	}
 }
 
@@ -150,15 +200,15 @@ func (from source) withJoin(kind string, right tableSource) source {
 	}
 }
 
-func (joined Joined[L, R]) Where(predicates ...Predicate) Query {
+func (joined Joined[L, R, NL, NR]) Where(predicates ...Predicate) Query {
 	return NewQuery(joined.source).Where(predicates...)
 }
 
-func (joined Joined[L, R]) Select(columns ...Selection) Query {
+func (joined Joined[L, R, NL, NR]) Select(columns ...Selection) Query {
 	return NewQuery(joined.source).Select(columns...)
 }
 
-func (joined Joined[L, R]) GroupBy(columns ...Selection) Query {
+func (joined Joined[L, R, NL, NR]) GroupBy(columns ...Selection) Query {
 	return NewQuery(joined.source).GroupBy(columns...)
 }
 
@@ -317,11 +367,21 @@ func (query Query) Build() (Statement, error) {
 	nextArg := 1
 	visible := map[string]bool{base.ref.qualifier(): true}
 	for _, join := range query.from.joins {
+		if join.kind == "FULL JOIN" && renderer.name() == "mysql" {
+			return Statement{}, fmt.Errorf("tiqq: mysql does not support FULL JOIN")
+		}
 		builder.WriteByte(' ')
 		builder.WriteString(join.kind)
 		builder.WriteByte(' ')
 		renderTable(renderer, &builder, join.right.ref)
 		conditions := join.conditions
+		if join.kind == "CROSS JOIN" {
+			if len(conditions) > 0 {
+				return Statement{}, fmt.Errorf("tiqq: CROSS JOIN does not accept ON")
+			}
+			visible[join.right.ref.qualifier()] = true
+			continue
+		}
 		if len(conditions) == 0 {
 			var err error
 			conditions, err = inferJoinConditions(query.from.tables, visible, join.right)

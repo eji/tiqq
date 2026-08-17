@@ -70,6 +70,23 @@ q = q.Where(UserTable.ID.Eq(input.ID))
 stmt, err := q.Build()
 ```
 
+Inserts use the same typed column/value pairing and can append rows for a bulk
+insert:
+
+```go
+q := UserTable.Insert(
+	UserTable.ID.Value(1),
+	UserTable.Name.Value("Alice"),
+).Values(
+	UserTable.ID.Value(2),
+	UserTable.Name.Value("Bob"),
+)
+stmt, err := q.Build()
+```
+
+Generated and identity columns are rejected, while omitted required columns
+are reported by `Build`.
+
 After an adapter scans values in projection order, result access preserves the
 column's generated type:
 

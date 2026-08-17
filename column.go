@@ -20,6 +20,12 @@ type Assignment[S any] struct {
 	value  any
 }
 
+// InsertValue is a type-safe column/value pair for an INSERT statement.
+type InsertValue[S any] struct {
+	column columnRef
+	value  any
+}
+
 // AliasColumn rebinds a column to an explicitly named table instance. The
 // alias becomes part of both its SQL qualifier and projection identity.
 func AliasColumn[From, To, V, C any](column Column[From, V, C], alias string) Column[To, V, C] {
@@ -94,6 +100,11 @@ func (c Column[S, V, C]) IsNotNull() Predicate {
 // To assigns a value to this column in an UPDATE statement.
 func (c Column[S, V, C]) To(value C) Assignment[S] {
 	return Assignment[S]{column: c.ref, value: value}
+}
+
+// Value associates this column with a value in an INSERT statement.
+func (c Column[S, V, C]) Value(value C) InsertValue[S] {
+	return InsertValue[S]{column: c.ref, value: value}
 }
 
 func listPredicate[C any](column columnRef, operator string, values []C) Predicate {

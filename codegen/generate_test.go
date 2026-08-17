@@ -41,6 +41,7 @@ func TestGenerate(t *testing.T) {
 	require.Contains(t, source, "tiqq.Column[UserScope, tiqq.Decimal, tiqq.Decimal]")
 	require.Contains(t, source, "Address tiqq.Column[AddressScope, sql.Null[string], string]")
 	require.Contains(t, source, "type NullableAddressTableDef struct")
+	require.Contains(t, source, "func (table UserTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[UserTableDef]")
 	require.Contains(t, source, "func (table UserTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]]")
 	require.Contains(t, source, "func (table UserTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]]")
 	require.Contains(t, source, `Columns: []string{"user_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}`)

@@ -92,6 +92,7 @@ func writeTable(output *bytes.Buffer, table schema.Table) {
 		fmt.Fprintf(output, "{Columns: %#v, ReferencedTable: %q, ReferencedColumns: %#v},", foreignKey.Columns, foreignKey.ReferencedTable, foreignKey.ReferencedColumns)
 	}
 	output.WriteString("})\n}\n\n")
+	fmt.Fprintf(output, "func (table %sTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[%sTableDef] { return tiqq.TableJoinSource(table.TiqqTableInfo()) }\n", typeName, typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[%sTableDef, NC] { return tiqq.LeftJoin(table, right) }\n", typeName, typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[%sTableDef, C] { return tiqq.InnerJoin(table, right) }\n", typeName, typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query { return tiqq.NewTableQuery(table).Where(predicates...) }\n", typeName)

@@ -10,33 +10,40 @@ import (
 type AddressScope struct{}
 
 type AddressTableDef struct {
-	ref     tiqq.TableRef
-	ID      tiqq.Column[AddressScope, int64, int64]
-	UserID  tiqq.Column[AddressScope, int64, int64]
-	Address tiqq.Column[AddressScope, string, string]
+	ref       tiqq.TableRef
+	ID        tiqq.Column[AddressScope, int64, int64]
+	UserID    tiqq.Column[AddressScope, int64, int64]
+	CompanyID tiqq.Column[AddressScope, int64, int64]
+	Address   tiqq.Column[AddressScope, string, string]
 }
 
 type NullableAddressTableDef struct {
-	ID      tiqq.Column[AddressScope, sql.Null[int64], int64]
-	UserID  tiqq.Column[AddressScope, sql.Null[int64], int64]
-	Address tiqq.Column[AddressScope, sql.Null[string], string]
+	ID        tiqq.Column[AddressScope, sql.Null[int64], int64]
+	UserID    tiqq.Column[AddressScope, sql.Null[int64], int64]
+	CompanyID tiqq.Column[AddressScope, sql.Null[int64], int64]
+	Address   tiqq.Column[AddressScope, sql.Null[string], string]
 }
 
 var AddressTable = AddressTableDef{
-	ref:     tiqq.NewTableRef("addresses"),
-	ID:      tiqq.RequiredColumn[AddressScope, int64]("addresses", "id"),
-	UserID:  tiqq.RequiredColumn[AddressScope, int64]("addresses", "user_id"),
-	Address: tiqq.RequiredColumn[AddressScope, string]("addresses", "address"),
+	ref:       tiqq.NewTableRef("addresses"),
+	ID:        tiqq.RequiredColumn[AddressScope, int64]("addresses", "id"),
+	UserID:    tiqq.RequiredColumn[AddressScope, int64]("addresses", "user_id"),
+	CompanyID: tiqq.RequiredColumn[AddressScope, int64]("addresses", "company_id"),
+	Address:   tiqq.RequiredColumn[AddressScope, string]("addresses", "address"),
 }
 
 func (table AddressTableDef) TiqqTableInfo() tiqq.TableInfo[AddressTableDef, NullableAddressTableDef] {
 	return tiqq.NewTableInfo(table.ref, table, NullableAddressTableDef{
-		ID:      tiqq.RebindNullable[AddressScope, AddressScope](table.ID),
-		UserID:  tiqq.RebindNullable[AddressScope, AddressScope](table.UserID),
-		Address: tiqq.RebindNullable[AddressScope, AddressScope](table.Address),
-	}, []tiqq.ForeignKey{{Columns: []string{"user_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}}})
+		ID:        tiqq.RebindNullable[AddressScope, AddressScope](table.ID),
+		UserID:    tiqq.RebindNullable[AddressScope, AddressScope](table.UserID),
+		CompanyID: tiqq.RebindNullable[AddressScope, AddressScope](table.CompanyID),
+		Address:   tiqq.RebindNullable[AddressScope, AddressScope](table.Address),
+	}, []tiqq.ForeignKey{{Columns: []string{"user_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}}, {Columns: []string{"company_id"}, ReferencedTable: "companies", ReferencedColumns: []string{"id"}}})
 }
 
+func (table AddressTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[AddressTableDef] {
+	return tiqq.TableJoinSource(table.TiqqTableInfo())
+}
 func (table AddressTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AddressTableDef, NC] {
 	return tiqq.LeftJoin(table, right)
 }
@@ -53,6 +60,7 @@ func (table AddressTableDef) As(alias string) AddressTableDef {
 	table.ref = table.ref.As(alias)
 	table.ID = tiqq.AliasColumn[AddressScope, AddressScope](table.ID, alias)
 	table.UserID = tiqq.AliasColumn[AddressScope, AddressScope](table.UserID, alias)
+	table.CompanyID = tiqq.AliasColumn[AddressScope, AddressScope](table.CompanyID, alias)
 	table.Address = tiqq.AliasColumn[AddressScope, AddressScope](table.Address, alias)
 	return table
 }
@@ -91,6 +99,9 @@ func (table AuditLogTableDef) TiqqTableInfo() tiqq.TableInfo[AuditLogTableDef, N
 	}, []tiqq.ForeignKey{})
 }
 
+func (table AuditLogTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[AuditLogTableDef] {
+	return tiqq.TableJoinSource(table.TiqqTableInfo())
+}
 func (table AuditLogTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[AuditLogTableDef, NC] {
 	return tiqq.LeftJoin(table, right)
 }
@@ -138,6 +149,9 @@ func (table CompanyTableDef) TiqqTableInfo() tiqq.TableInfo[CompanyTableDef, Nul
 	}, []tiqq.ForeignKey{})
 }
 
+func (table CompanyTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[CompanyTableDef] {
+	return tiqq.TableJoinSource(table.TiqqTableInfo())
+}
 func (table CompanyTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[CompanyTableDef, NC] {
 	return tiqq.LeftJoin(table, right)
 }
@@ -187,6 +201,9 @@ func (table UserTableDef) TiqqTableInfo() tiqq.TableInfo[UserTableDef, NullableU
 	}, []tiqq.ForeignKey{{Columns: []string{"manager_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}}})
 }
 
+func (table UserTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[UserTableDef] {
+	return tiqq.TableJoinSource(table.TiqqTableInfo())
+}
 func (table UserTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[UserTableDef, NC] {
 	return tiqq.LeftJoin(table, right)
 }

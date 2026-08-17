@@ -55,6 +55,24 @@ type TableLike[C, NC any] interface {
 	TiqqTableInfo() TableInfo[C, NC]
 }
 
+// JoinSourceInfo carries the concrete left branch and its SQL source.
+type JoinSourceInfo[C any] struct {
+	columns C
+	source  source
+}
+
+// JoinSource is implemented by generated tables and Joined trees.
+type JoinSource[C any] interface {
+	TiqqJoinSource() JoinSourceInfo[C]
+}
+
+func TableJoinSource[C, NC any](table TableInfo[C, NC]) JoinSourceInfo[C] {
+	return JoinSourceInfo[C]{
+		columns: table.required,
+		source:  source{tables: []tableSource{tableSourceOf(table)}},
+	}
+}
+
 type tableSource struct {
 	ref         TableRef
 	foreignKeys []ForeignKey
@@ -81,6 +99,10 @@ type Joined[L, R any] struct {
 func (joined Joined[L, R]) Left() L  { return joined.left }
 func (joined Joined[L, R]) Right() R { return joined.right }
 
+func (joined Joined[L, R]) TiqqJoinSource() JoinSourceInfo[Joined[L, R]] {
+	return JoinSourceInfo[Joined[L, R]]{columns: joined, source: joined.source}
+}
+
 // On replaces the inferred condition of the most recently added JOIN.
 func (joined Joined[L, R]) On(conditions ...Predicate) Joined[L, R] {
 	if len(joined.source.joins) == 0 {
@@ -92,36 +114,37 @@ func (joined Joined[L, R]) On(conditions ...Predicate) Joined[L, R] {
 	return joined
 }
 
-func LeftJoin[LC, LNC, RC, RNC any, LT TableLike[LC, LNC], RT TableLike[RC, RNC]](
+func LeftJoin[LC, RC, RNC any, LT JoinSource[LC], RT TableLike[RC, RNC]](
 	left LT,
 	right RT,
 ) Joined[LC, RNC] {
-	leftInfo, rightInfo := left.TiqqTableInfo(), right.TiqqTableInfo()
+	leftInfo, rightInfo := left.TiqqJoinSource(), right.TiqqTableInfo()
 	return Joined[LC, RNC]{
-		left: leftInfo.required, right: rightInfo.nullable,
-		source: source{
-			tables: []tableSource{tableSourceOf(leftInfo), tableSourceOf(rightInfo)},
-			joins:  []joinClause{{kind: "LEFT JOIN", right: tableSourceOf(rightInfo)}},
-		},
+		left: leftInfo.columns, right: rightInfo.nullable,
+		source: leftInfo.source.withJoin("LEFT JOIN", tableSourceOf(rightInfo)),
 	}
 }
 
-func InnerJoin[LC, LNC, RC, RNC any, LT TableLike[LC, LNC], RT TableLike[RC, RNC]](
+func InnerJoin[LC, RC, RNC any, LT JoinSource[LC], RT TableLike[RC, RNC]](
 	left LT,
 	right RT,
 ) Joined[LC, RC] {
-	leftInfo, rightInfo := left.TiqqTableInfo(), right.TiqqTableInfo()
+	leftInfo, rightInfo := left.TiqqJoinSource(), right.TiqqTableInfo()
 	return Joined[LC, RC]{
-		left: leftInfo.required, right: rightInfo.required,
-		source: source{
-			tables: []tableSource{tableSourceOf(leftInfo), tableSourceOf(rightInfo)},
-			joins:  []joinClause{{kind: "INNER JOIN", right: tableSourceOf(rightInfo)}},
-		},
+		left: leftInfo.columns, right: rightInfo.required,
+		source: leftInfo.source.withJoin("INNER JOIN", tableSourceOf(rightInfo)),
 	}
 }
 
 func tableSourceOf[C, NC any](info TableInfo[C, NC]) tableSource {
 	return tableSource{ref: info.ref, foreignKeys: append([]ForeignKey(nil), info.foreignKeys...)}
+}
+
+func (from source) withJoin(kind string, right tableSource) source {
+	return source{
+		tables: appendCopy(from.tables, right),
+		joins:  appendCopy(from.joins, joinClause{kind: kind, right: right}),
+	}
 }
 
 func (joined Joined[L, R]) Where(predicates ...Predicate) Query {

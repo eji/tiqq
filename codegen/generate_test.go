@@ -45,6 +45,8 @@ func TestGenerate(t *testing.T) {
 	require.Contains(t, source, "func (table UserTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]]")
 	require.Contains(t, source, "func (table UserTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]]")
 	require.Contains(t, source, "func (table UserTableDef) Update() tiqq.UpdateQuery[UserScope]")
+	require.Contains(t, source, "func (table UserTableDef) Insert() tiqq.InsertQuery[UserScope]")
+	require.Contains(t, source, `tiqq.NewInsert[UserScope](table.ref, []string{"id", "display_name", "balance"}, []string{"id", "display_name", "balance"})`)
 	require.Contains(t, source, `Columns: []string{"user_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}`)
 }
 
@@ -129,3 +131,24 @@ func TestGenerateSelfJoinAliases(t *testing.T) {
 	require.Contains(t, source, "table.ManagerID = tiqq.AliasColumn[UserScope, UserScope](table.ManagerID, alias)")
 	require.NotContains(t, source, "UserAliasTableDef")
 }
+
+func TestGenerateInsertMetadata(t *testing.T) {
+	database := schema.Schema{Tables: []schema.Table{{
+		Name: "users",
+		Columns: []schema.Column{
+			{Name: "id", DBType: "int8", Identity: true},
+			{Name: "name", DBType: "text"},
+			{Name: "nickname", DBType: "text", Nullable: true},
+			{Name: "created_at", DBType: "timestamp", Default: stringPointer("now()")},
+			{Name: "search_text", DBType: "text", Generated: true},
+		},
+	}}}
+
+	generated, err := codegen.Generate(database, codegen.Config{Package: "dbschema"})
+	source := string(generated)
+
+	require.NoError(t, err)
+	require.Contains(t, source, `tiqq.NewInsert[UserScope](table.ref, []string{"name", "nickname", "created_at"}, []string{"name"})`)
+}
+
+func stringPointer(value string) *string { return &value }

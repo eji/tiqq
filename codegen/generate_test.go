@@ -240,3 +240,30 @@ func TestGenerateMySQL(t *testing.T) {
 	require.Contains(t, source, "func (table MetricTableDef) Insert() mysql.InsertQuery[MetricScope]")
 	require.Contains(t, source, "tiqq.NewInsert[MetricScope, tiqq.MySQLMarker]")
 }
+
+func TestGenerateSQLite(t *testing.T) {
+	database := schema.Schema{Dialect: schema.SQLite, Tables: []schema.Table{{
+		Name: "metrics",
+		Columns: []schema.Column{
+			{Name: "id", DBType: "integer", Identity: true},
+			{Name: "ratio", DBType: "double"},
+			{Name: "payload", DBType: "blob", Nullable: true},
+			{Name: "label", DBType: "varchar(255)"},
+			{Name: "amount", DBType: "decimal(20, 4)"},
+		},
+	}}}
+
+	generated, err := codegen.Generate(database, codegen.Config{Package: "dbschema"})
+	source := string(generated)
+
+	require.NoError(t, err)
+	require.Contains(t, source, `"github.com/eji/tiqq/sqlite"`)
+	require.Contains(t, source, "var tiqqSchema = tiqq.NewSchemaInfo(tiqq.SQLite)")
+	require.Contains(t, source, "tiqq.NumericColumn[MetricScope, int64, int64, int64, float64]")
+	require.Contains(t, source, "tiqq.NumericColumn[MetricScope, float64, float64, float64, float64]")
+	require.Contains(t, source, "tiqq.Column[MetricScope, sql.Null[[]byte], []byte]")
+	require.Contains(t, source, "tiqq.Column[MetricScope, string, string]")
+	require.Contains(t, source, "tiqq.NumericColumn[MetricScope, tiqq.Decimal, tiqq.Decimal, tiqq.Decimal, tiqq.Decimal]")
+	require.Contains(t, source, "func (table MetricTableDef) Insert() sqlite.InsertQuery[MetricScope]")
+	require.Contains(t, source, "tiqq.NewInsert[MetricScope, tiqq.SQLiteMarker]")
+}

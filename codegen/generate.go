@@ -25,7 +25,7 @@ func Generate(database schema.Schema, config Config) ([]byte, error) {
 	if dialect == "" {
 		dialect = schema.PostgreSQL
 	}
-	if dialect != schema.PostgreSQL && dialect != schema.MySQL {
+	if dialect != schema.PostgreSQL && dialect != schema.MySQL && dialect != schema.SQLite {
 		return nil, fmt.Errorf("codegen: unsupported SQL dialect %s", dialect)
 	}
 	tables := append([]schema.Table(nil), database.Tables...)
@@ -39,6 +39,8 @@ func Generate(database schema.Schema, config Config) ([]byte, error) {
 	dialectPackage, dialectName := "postgres", "PostgreSQL"
 	if dialect == schema.MySQL {
 		dialectPackage, dialectName = "mysql", "MySQL"
+	} else if dialect == schema.SQLite {
+		dialectPackage, dialectName = "sqlite", "SQLite"
 	}
 	fmt.Fprintf(&output, "import (\n\t\"database/sql\"\n\n\t\"github.com/eji/tiqq\"\n\t\"github.com/eji/tiqq/%s\"\n)\n\n", dialectPackage)
 	fmt.Fprintf(&output, "var tiqqSchema = tiqq.NewSchemaInfo(tiqq.%s)\n\n", dialectName)
@@ -130,6 +132,8 @@ func writeTable(output *bytes.Buffer, table schema.Table, dialect schema.Dialect
 	dialectPackage, marker := "postgres", "PostgreSQLMarker"
 	if dialect == schema.MySQL {
 		dialectPackage, marker = "mysql", "MySQLMarker"
+	} else if dialect == schema.SQLite {
+		dialectPackage, marker = "sqlite", "SQLiteMarker"
 	}
 	fmt.Fprintf(output, "func (table %sTableDef) Insert() %s.InsertQuery[%s] { return %s.NewInsert(tiqq.NewInsert[%s, tiqq.%s](table.ref, %#v, %#v, %#v)) }\n", typeName, dialectPackage, scope, dialectPackage, scope, marker, insertableColumns(table.Columns), requiredInsertColumns(table.Columns), uniqueColumns(table))
 	fmt.Fprintf(output, "func (table %sTableDef) As(alias string) %sTableDef {\n", typeName, typeName)
@@ -190,6 +194,18 @@ func columnType(dialect schema.Dialect, scope string, column schema.Column, oute
 }
 
 func numericAggregateTypes(dialect schema.Dialect, databaseType string) (string, string, bool) {
+	if dialect == schema.SQLite {
+		switch sqliteAffinity(databaseType) {
+		case "integer":
+			return "int64", "float64", true
+		case "real":
+			return "float64", "float64", true
+		case "numeric":
+			return "tiqq.Decimal", "tiqq.Decimal", true
+		default:
+			return "", "", false
+		}
+	}
 	if dialect == schema.MySQL {
 		switch databaseType {
 		case "tinyint", "smallint", "mediumint", "int", "integer", "bigint", "decimal", "numeric":
@@ -216,6 +232,20 @@ func numericAggregateTypes(dialect schema.Dialect, databaseType string) (string,
 
 func goType(dialect schema.Dialect, column schema.Column) string {
 	databaseType := column.DBType
+	if dialect == schema.SQLite {
+		switch sqliteAffinity(databaseType) {
+		case "integer":
+			return "int64"
+		case "real":
+			return "float64"
+		case "blob":
+			return "[]byte"
+		case "numeric":
+			return "tiqq.Decimal"
+		default:
+			return "string"
+		}
+	}
 	if dialect == schema.MySQL {
 		switch databaseType {
 		case "tinyint":
@@ -271,6 +301,22 @@ func goType(dialect schema.Dialect, column schema.Column) string {
 		return "tiqq.Decimal"
 	default:
 		return "string"
+	}
+}
+
+func sqliteAffinity(databaseType string) string {
+	normalized := strings.ToUpper(strings.TrimSpace(databaseType))
+	switch {
+	case normalized == "" || strings.Contains(normalized, "BLOB"):
+		return "blob"
+	case strings.Contains(normalized, "INT"):
+		return "integer"
+	case strings.Contains(normalized, "CHAR"), strings.Contains(normalized, "CLOB"), strings.Contains(normalized, "TEXT"):
+		return "text"
+	case strings.Contains(normalized, "REAL"), strings.Contains(normalized, "FLOA"), strings.Contains(normalized, "DOUB"):
+		return "real"
+	default:
+		return "numeric"
 	}
 }
 

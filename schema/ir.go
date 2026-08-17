@@ -13,6 +13,7 @@ type Dialect string
 const (
 	PostgreSQL Dialect = "postgresql"
 	MySQL      Dialect = "mysql"
+	SQLite     Dialect = "sqlite"
 )
 
 type Table struct {

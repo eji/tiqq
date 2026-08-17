@@ -14,10 +14,12 @@ import (
 	"github.com/eji/tiqq/codegen"
 	mysqlintrospect "github.com/eji/tiqq/introspect/mysql"
 	postgresintrospect "github.com/eji/tiqq/introspect/postgres"
+	sqliteintrospect "github.com/eji/tiqq/introspect/sqlite"
 	"github.com/eji/tiqq/schema"
 	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
+	_ "modernc.org/sqlite"
 )
 
 func main() {
@@ -34,6 +36,9 @@ func dispatch(arguments []string) error {
 	if len(arguments) > 0 && arguments[0] == "mysql" {
 		return runMySQLCLI(arguments[1:], defaultMySQLDependencies())
 	}
+	if len(arguments) > 0 && arguments[0] == "sqlite" {
+		return runSQLiteCLI(arguments[1:], defaultSQLiteDependencies())
+	}
 	flags := flag.NewFlagSet("tiqq-gen", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	packageName := flags.String("package", "schema", "generated Go package name")
@@ -43,6 +48,58 @@ func dispatch(arguments []string) error {
 		return err
 	}
 	return run(*packageName, *inputPath, *outputPath)
+}
+
+type sqliteDependencies struct {
+	open       func(string) (*sql.DB, error)
+	introspect func(context.Context, *sql.DB) (schema.Schema, error)
+	generate   func(schema.Schema, codegen.Config) ([]byte, error)
+	write      func(string, []byte, io.Writer) error
+	stdout     io.Writer
+}
+
+func defaultSQLiteDependencies() sqliteDependencies {
+	return sqliteDependencies{
+		open:       func(dsn string) (*sql.DB, error) { return sql.Open("sqlite", dsn) },
+		introspect: sqliteintrospect.Introspect,
+		generate:   codegen.Generate,
+		write:      writeGenerated,
+		stdout:     os.Stdout,
+	}
+}
+
+func runSQLiteCLI(arguments []string, dependencies sqliteDependencies) error {
+	flags := flag.NewFlagSet("tiqq-gen sqlite", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	databasePath := flags.String("database", "", "SQLite database file or URI")
+	packageName := flags.String("package", "schema", "generated Go package name")
+	outputPath := flags.String("output", "schema_gen.go", "generated Go output file, or - for stdout")
+	timeout := flags.Duration("timeout", 10*time.Second, "connection and introspection timeout")
+	if err := flags.Parse(arguments); err != nil {
+		return err
+	}
+	if *databasePath == "" {
+		return fmt.Errorf("SQLite database path is required")
+	}
+	database, err := dependencies.open(*databasePath)
+	if err != nil {
+		return fmt.Errorf("open SQLite database: %w", err)
+	}
+	defer database.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+	if err := database.PingContext(ctx); err != nil {
+		return fmt.Errorf("connect to SQLite: %w", err)
+	}
+	databaseSchema, err := dependencies.introspect(ctx, database)
+	if err != nil {
+		return err
+	}
+	generated, err := dependencies.generate(databaseSchema, codegen.Config{Package: *packageName})
+	if err != nil {
+		return err
+	}
+	return dependencies.write(*outputPath, generated, dependencies.stdout)
 }
 
 type mysqlDependencies struct {

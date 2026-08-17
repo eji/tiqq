@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Decimal is an exact PostgreSQL numeric/decimal representation. It retains
+// Decimal is an exact SQL numeric/decimal representation. It retains
 // the database text representation and never converts through floating point.
 type Decimal string
 

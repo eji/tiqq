@@ -214,3 +214,29 @@ func TestGeneratePostgresConflictKeys(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(generated), `[][]string{[]string{"id"}, []string{"email"}}`)
 }
+
+func TestGenerateMySQL(t *testing.T) {
+	database := schema.Schema{Dialect: schema.MySQL, Tables: []schema.Table{{
+		Name: "metrics",
+		Columns: []schema.Column{
+			{Name: "id", DBType: "bigint"},
+			{Name: "amount", DBType: "decimal"},
+			{Name: "ratio", DBType: "float"},
+			{Name: "payload", DBType: "blob", Nullable: true},
+		},
+		PrimaryKey: &schema.Key{Name: "metrics_pkey", Columns: []string{"id"}},
+	}}}
+
+	generated, err := codegen.Generate(database, codegen.Config{Package: "dbschema"})
+	source := string(generated)
+
+	require.NoError(t, err)
+	require.Contains(t, source, `"github.com/eji/tiqq/mysql"`)
+	require.NotContains(t, source, `"github.com/eji/tiqq/postgres"`)
+	require.Contains(t, source, "var tiqqSchema = tiqq.NewSchemaInfo(tiqq.MySQL)")
+	require.Contains(t, source, "tiqq.NumericColumn[MetricScope, int64, int64, tiqq.Decimal, tiqq.Decimal]")
+	require.Contains(t, source, "tiqq.NumericColumn[MetricScope, float32, float32, float64, float64]")
+	require.Contains(t, source, "tiqq.Column[MetricScope, sql.Null[[]byte], []byte]")
+	require.Contains(t, source, "func (table MetricTableDef) Insert() mysql.InsertQuery[MetricScope]")
+	require.Contains(t, source, "tiqq.NewInsert[MetricScope, tiqq.MySQLMarker]")
+}

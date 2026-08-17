@@ -10,7 +10,10 @@ type Schema struct {
 
 type Dialect string
 
-const PostgreSQL Dialect = "postgresql"
+const (
+	PostgreSQL Dialect = "postgresql"
+	MySQL      Dialect = "mysql"
+)
 
 type Table struct {
 	Schema      string

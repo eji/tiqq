@@ -59,6 +59,10 @@ Generated tables retain the SQL dialect of their introspected schema. `Build`
 uses that metadata for identifier quoting, placeholders, and feature validation;
 callers do not pass a dialect or override the schema's source database.
 
+PostgreSQL and MySQL schema IR generate dialect-specific table metadata and
+insert builders. MySQL rendering uses backtick-quoted identifiers and `?`
+placeholders. Direct MySQL database introspection will be added separately.
+
 For a statically defined query that should fail fast during development, use
 `q.MustBuild()`; it panics with the same validation error.
 

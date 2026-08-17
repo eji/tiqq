@@ -104,17 +104,19 @@ Numeric aggregate result types follow PostgreSQL's type rules and aggregate
 results other than `COUNT` remain nullable:
 
 ```go
-count := AddressTable.ID.Count()       // int64
-sum := AddressTable.ID.Sum()           // sql.Null[tiqq.Decimal]
-average := AddressTable.ID.Avg()       // sql.Null[tiqq.Decimal]
+count := AddressTable.ID.Count() // typed COUNT expression
+sum := AddressTable.ID.Sum()     // typed SUM expression
+average := AddressTable.ID.Avg() // typed AVG expression
 
 q := AddressTable.
 	GroupBy(AddressTable.UserID).
 	Having(count.Gt(1)).
-	Select(AddressTable.UserID, count)
+	Select(AddressTable.UserID, count, sum, average)
 
 stmt, err := q.Build()
-countValue, err := row.Get(count)
+countValue, err := row.Get(count) // int64
+sumValue, err := row.Get(sum)     // sql.Null[tiqq.Decimal]
+averageValue, err := row.Get(average) // sql.Null[tiqq.Decimal]
 ```
 
 Self joins require explicit aliases so SQL qualifiers and projection identities

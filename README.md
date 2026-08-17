@@ -92,9 +92,29 @@ column's generated type:
 
 ```go
 row, err := tiqq.NewRow(stmt, id, name, nullableAddress)
-id      := row.Get(j.Left().ID)       // int64
-name    := row.Get(j.Left().Name)     // string
-address := row.Get(j.Right().Address) // sql.Null[string]
+id, err      := row.Get(j.Left().ID)       // int64
+name, err    := row.Get(j.Left().Name)     // string
+address, err := row.Get(j.Right().Address) // sql.Null[string]
+```
+
+`Get` reports missing projections and driver conversion failures as errors.
+`MustGet` is available for queries whose projection is statically fixed.
+
+Numeric aggregate result types follow PostgreSQL's type rules and aggregate
+results other than `COUNT` remain nullable:
+
+```go
+count := AddressTable.ID.Count()       // int64
+sum := AddressTable.ID.Sum()           // sql.Null[tiqq.Decimal]
+average := AddressTable.ID.Avg()       // sql.Null[tiqq.Decimal]
+
+q := AddressTable.
+	GroupBy(AddressTable.UserID).
+	Having(count.Gt(1)).
+	Select(AddressTable.UserID, count)
+
+stmt, err := q.Build()
+countValue, err := row.Get(count)
 ```
 
 Self joins require explicit aliases so SQL qualifiers and projection identities
@@ -113,8 +133,8 @@ q := j.Select(
 	j.Right().Name,
 )
 
-employeeName := row.Get(j.Left().Name)  // string
-managerName := row.Get(j.Right().Name)  // sql.Null[string]
+employeeName, err := row.Get(j.Left().Name) // string
+managerName, err := row.Get(j.Right().Name) // sql.Null[string]
 ```
 
 The generator emits one generic `InnerJoin` and `LeftJoin` method per table,

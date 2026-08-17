@@ -71,19 +71,35 @@ func writeTable(output *bytes.Buffer, table schema.Table) {
 	output.WriteString("}\n\n")
 	fmt.Fprintf(output, "var %sTable = %sTableDef{\n\tref: tiqq.NewTableRef(%q),\n", typeName, typeName, table.Name)
 	for _, column := range table.Columns {
+		sumType, avgType, numeric := numericAggregateTypes(column.DBType)
 		constructor := "RequiredColumn"
+		typeArguments := fmt.Sprintf("%s, %s", scope, goType(column.DBType))
+		if numeric {
+			constructor = "RequiredNumericColumn"
+			typeArguments = fmt.Sprintf("%s, %s, %s, %s", scope, goType(column.DBType), sumType, avgType)
+		}
 		if column.Nullable {
 			constructor = "NullableColumn"
+			if numeric {
+				constructor = "NullableNumericColumn"
+			}
 		}
-		fmt.Fprintf(output, "\t%s: tiqq.%s[%s, %s](%q, %q),\n", exported(column.Name), constructor, scope, goType(column.DBType), table.Name, column.Name)
+		fmt.Fprintf(output, "\t%s: tiqq.%s[%s](%q, %q),\n", exported(column.Name), constructor, typeArguments, table.Name, column.Name)
 	}
 	output.WriteString("}\n\n")
 	fmt.Fprintf(output, "func (table %sTableDef) TiqqTableInfo() tiqq.TableInfo[%sTableDef, %s] {\n", typeName, typeName, nullableType)
 	fmt.Fprintf(output, "return tiqq.NewTableInfo(table.ref, table, %s{\n", nullableType)
 	for _, column := range table.Columns {
 		function := "RebindNullable"
+		_, _, numeric := numericAggregateTypes(column.DBType)
+		if numeric {
+			function = "RebindNullableNumeric"
+		}
 		if column.Nullable {
 			function = "RebindExistingNullable"
+			if numeric {
+				function = "RebindExistingNullableNumeric"
+			}
 		}
 		fmt.Fprintf(output, "\t%s: tiqq.%s[%s, %s](table.%s),\n", exported(column.Name), function, scope, scope, exported(column.Name))
 	}
@@ -97,12 +113,17 @@ func writeTable(output *bytes.Buffer, table schema.Table) {
 	fmt.Fprintf(output, "func (table %sTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[%sTableDef, C] { return tiqq.InnerJoin(table, right) }\n", typeName, typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query { return tiqq.NewTableQuery(table).Where(predicates...) }\n", typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) Select(columns ...tiqq.Selection) tiqq.Query { return tiqq.NewTableQuery(table).Select(columns...) }\n", typeName)
+	fmt.Fprintf(output, "func (table %sTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query { return tiqq.NewTableQuery(table).GroupBy(columns...) }\n", typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) Update() tiqq.UpdateQuery[%s] { return tiqq.NewUpdate[%s](table) }\n", typeName, scope, scope)
 	fmt.Fprintf(output, "func (table %sTableDef) Insert() tiqq.InsertQuery[%s] { return tiqq.NewInsert[%s](table.ref, %#v, %#v) }\n", typeName, scope, scope, insertableColumns(table.Columns), requiredInsertColumns(table.Columns))
 	fmt.Fprintf(output, "func (table %sTableDef) As(alias string) %sTableDef {\n", typeName, typeName)
 	output.WriteString("table.ref = table.ref.As(alias)\n")
 	for _, column := range table.Columns {
-		fmt.Fprintf(output, "table.%s = tiqq.AliasColumn[%s, %s](table.%s, alias)\n", exported(column.Name), scope, scope, exported(column.Name))
+		function := "AliasColumn"
+		if _, _, numeric := numericAggregateTypes(column.DBType); numeric {
+			function = "AliasNumericColumn"
+		}
+		fmt.Fprintf(output, "table.%s = tiqq.%s[%s, %s](table.%s, alias)\n", exported(column.Name), function, scope, scope, exported(column.Name))
 	}
 	output.WriteString("return table\n}\n\n")
 }
@@ -129,10 +150,31 @@ func requiredInsertColumns(columns []schema.Column) []string {
 
 func columnType(scope string, column schema.Column, outer bool) string {
 	value := goType(column.DBType)
+	if sumType, avgType, numeric := numericAggregateTypes(column.DBType); numeric {
+		if column.Nullable || outer {
+			return fmt.Sprintf("tiqq.NumericColumn[%s, sql.Null[%s], %s, %s, %s]", scope, value, value, sumType, avgType)
+		}
+		return fmt.Sprintf("tiqq.NumericColumn[%s, %s, %s, %s, %s]", scope, value, value, sumType, avgType)
+	}
 	if column.Nullable || outer {
 		return fmt.Sprintf("tiqq.Column[%s, sql.Null[%s], %s]", scope, value, value)
 	}
 	return fmt.Sprintf("tiqq.Column[%s, %s, %s]", scope, value, value)
+}
+
+func numericAggregateTypes(databaseType string) (string, string, bool) {
+	switch databaseType {
+	case "int2", "smallint", "smallserial", "int4", "integer", "serial":
+		return "int64", "tiqq.Decimal", true
+	case "int8", "bigint", "bigserial", "numeric", "decimal":
+		return "tiqq.Decimal", "tiqq.Decimal", true
+	case "float4", "real":
+		return "float32", "float64", true
+	case "float8", "double precision":
+		return "float64", "float64", true
+	default:
+		return "", "", false
+	}
 }
 
 func goType(databaseType string) string {

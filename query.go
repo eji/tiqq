@@ -155,6 +155,10 @@ func (joined Joined[L, R]) Select(columns ...Selection) Query {
 	return NewQuery(joined.source).Select(columns...)
 }
 
+func (joined Joined[L, R]) GroupBy(columns ...Selection) Query {
+	return NewQuery(joined.source).GroupBy(columns...)
+}
+
 func NewTableQuery[C, NC any](table TableLike[C, NC]) Query {
 	info := table.TiqqTableInfo()
 	return NewQuery(source{tables: []tableSource{tableSourceOf(info)}})
@@ -167,6 +171,21 @@ type Query struct {
 	from        source
 	predicates  []Predicate
 	projections []columnRef
+	groupBy     []columnRef
+	having      []Predicate
+}
+
+func (query Query) GroupBy(columns ...Selection) Query {
+	query.groupBy = make([]columnRef, len(columns))
+	for index, column := range columns {
+		query.groupBy[index] = column.selection()
+	}
+	return query
+}
+
+func (query Query) Having(predicates ...Predicate) Query {
+	query.having = appendCopy(query.having, predicates...)
+	return query
 }
 
 func (query Query) Where(predicates ...Predicate) Query {
@@ -197,9 +216,24 @@ func (query Query) Build() (Statement, error) {
 		return Statement{}, err
 	}
 	for _, predicate := range query.predicates {
-		if err := validateColumns("WHERE", predicateColumns(predicate), allowed); err != nil {
+		columns := predicateColumns(predicate)
+		if err := validateColumns("WHERE", columns, allowed); err != nil {
 			return Statement{}, err
 		}
+		if err := validateNoAggregates("WHERE", columns); err != nil {
+			return Statement{}, err
+		}
+	}
+	if err := validateColumns("GROUP BY", query.groupBy, allowed); err != nil {
+		return Statement{}, err
+	}
+	for _, predicate := range query.having {
+		if err := validateColumns("HAVING", predicateColumns(predicate), allowed); err != nil {
+			return Statement{}, err
+		}
+	}
+	if err := validateGrouping(query.projections, query.groupBy, query.having); err != nil {
+		return Statement{}, err
 	}
 
 	var builder strings.Builder
@@ -234,7 +268,11 @@ func (query Query) Build() (Statement, error) {
 		joinAllowed[join.right.ref.qualifier()] = true
 		builder.WriteString(" ON ")
 		for index, condition := range conditions {
-			if err := validateColumns("ON", predicateColumns(condition), joinAllowed); err != nil {
+			columns := predicateColumns(condition)
+			if err := validateColumns("ON", columns, joinAllowed); err != nil {
+				return Statement{}, err
+			}
+			if err := validateNoAggregates("ON", columns); err != nil {
 				return Statement{}, err
 			}
 			if index > 0 {
@@ -257,7 +295,71 @@ func (query Query) Build() (Statement, error) {
 			args = append(args, values...)
 		}
 	}
+	if len(query.groupBy) > 0 {
+		builder.WriteString(" GROUP BY ")
+		for index, column := range query.groupBy {
+			if index > 0 {
+				builder.WriteString(", ")
+			}
+			builder.WriteString(renderColumn(column))
+		}
+	}
+	if len(query.having) > 0 {
+		builder.WriteString(" HAVING ")
+		for index, predicate := range query.having {
+			if index > 0 {
+				builder.WriteString(" AND ")
+			}
+			text, values := renderPredicate(predicate, &nextArg)
+			builder.WriteString(text)
+			args = append(args, values...)
+		}
+	}
 	return newStatement(builder.String(), args, query.projections), nil
+}
+
+func validateNoAggregates(clause string, columns []columnRef) error {
+	for _, column := range columns {
+		if column.aggregate {
+			return fmt.Errorf("tiqq: %s does not accept aggregate %s", clause, column.id)
+		}
+	}
+	return nil
+}
+
+func validateGrouping(projections, groupBy []columnRef, having []Predicate) error {
+	grouped := make(map[string]bool, len(groupBy))
+	for _, column := range groupBy {
+		if column.aggregate {
+			return fmt.Errorf("tiqq: GROUP BY does not accept aggregate %s", column.id)
+		}
+		grouped[column.id] = true
+	}
+	hasAggregate := false
+	for _, projection := range projections {
+		hasAggregate = hasAggregate || projection.aggregate
+	}
+	for _, predicate := range having {
+		for _, column := range predicateColumns(predicate) {
+			hasAggregate = hasAggregate || column.aggregate
+		}
+	}
+	if !hasAggregate && len(groupBy) == 0 {
+		return nil
+	}
+	for _, projection := range projections {
+		if !projection.aggregate && !grouped[projection.id] {
+			return fmt.Errorf("tiqq: SELECT column %s must appear in GROUP BY", projection.id)
+		}
+	}
+	for _, predicate := range having {
+		for _, column := range predicateColumns(predicate) {
+			if !column.aggregate && !grouped[column.id] {
+				return fmt.Errorf("tiqq: HAVING column %s must appear in GROUP BY", column.id)
+			}
+		}
+	}
+	return nil
 }
 
 // MustBuild builds a statement and panics if validation fails.

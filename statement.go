@@ -57,22 +57,27 @@ func NewRow(statement Statement, values ...any) (Row, error) {
 	return Row{statement: statement, values: append([]any(nil), values...)}, nil
 }
 
-// Get returns the schema-derived type of column. Missing projection membership
-// or incompatible driver values panic with a concise diagnostic.
-func (r Row) Get[S, V, C any](column Column[S, V, C]) V {
+type resultKey[V any] interface {
+	resultRef() columnRef
+	resultValue(V)
+}
+
+// Get returns the schema-derived result type or a projection/conversion error.
+func (r Row) Get[V any, K resultKey[V]](key K) (V, error) {
+	column := key.resultRef()
 	var zero V
-	position, ok := r.statement.positions[column.ref.id]
+	position, ok := r.statement.positions[column.id]
 	if !ok {
-		panic("tiqq: column " + column.ref.id + " is not in the projection")
+		return zero, fmt.Errorf("tiqq: column %s is not in the projection", column.id)
 	}
 	raw := r.values[position]
 	if value, ok := raw.(V); ok {
-		return value
+		return value, nil
 	}
 	if raw == nil {
 		valueType := reflect.TypeOf((*V)(nil)).Elem()
 		if valueType.Kind() == reflect.Struct && valueType.PkgPath() == "database/sql" {
-			return zero
+			return zero, nil
 		}
 	}
 	wanted := reflect.TypeOf((*V)(nil)).Elem()
@@ -80,13 +85,13 @@ func (r Row) Get[S, V, C any](column Column[S, V, C]) V {
 	if wanted == reflect.TypeOf(Decimal("")) {
 		switch value := raw.(type) {
 		case string:
-			return any(Decimal(value)).(V)
+			return any(Decimal(value)).(V), nil
 		case []byte:
-			return any(Decimal(string(value))).(V)
+			return any(Decimal(string(value))).(V), nil
 		}
 	}
 	if actual.IsValid() && actual.Type().ConvertibleTo(wanted) {
-		return actual.Convert(wanted).Interface().(V)
+		return actual.Convert(wanted).Interface().(V), nil
 	}
 	if wanted.Kind() == reflect.Struct && wanted.PkgPath() == "database/sql" {
 		valueField, found := wanted.FieldByName("V")
@@ -94,23 +99,32 @@ func (r Row) Get[S, V, C any](column Column[S, V, C]) V {
 			result := reflect.New(wanted).Elem()
 			result.FieldByName("V").Set(actual.Convert(valueField.Type))
 			result.FieldByName("Valid").SetBool(true)
-			return result.Interface().(V)
+			return result.Interface().(V), nil
 		}
 		if found && valueField.Type == reflect.TypeOf(Decimal("")) {
 			result := reflect.New(wanted).Elem()
 			switch value := raw.(type) {
 			case string:
 				result.FieldByName("V").Set(reflect.ValueOf(Decimal(value)))
+				result.FieldByName("Valid").SetBool(true)
+				return result.Interface().(V), nil
 			case []byte:
 				result.FieldByName("V").Set(reflect.ValueOf(Decimal(string(value))))
-			default:
-				break
+				result.FieldByName("Valid").SetBool(true)
+				return result.Interface().(V), nil
 			}
-			result.FieldByName("Valid").SetBool(true)
-			return result.Interface().(V)
 		}
 	}
-	panic(fmt.Sprintf("tiqq: column %s: cannot use %T as %T", column.ref.id, raw, zero))
+	return zero, fmt.Errorf("tiqq: column %s: cannot use %T as %T", column.id, raw, zero)
+}
+
+// MustGet returns a typed value and panics if Get fails.
+func (r Row) MustGet[V any, K resultKey[V]](key K) V {
+	value, err := r.Get(key)
+	if err != nil {
+		panic(err)
+	}
+	return value
 }
 
 // Keep database/sql part of the public nullable contract.

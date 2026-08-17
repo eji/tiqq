@@ -11,32 +11,32 @@ type AddressScope struct{}
 
 type AddressTableDef struct {
 	ref       tiqq.TableRef
-	ID        tiqq.Column[AddressScope, int64, int64]
-	UserID    tiqq.Column[AddressScope, int64, int64]
-	CompanyID tiqq.Column[AddressScope, int64, int64]
+	ID        tiqq.NumericColumn[AddressScope, int64, int64, tiqq.Decimal, tiqq.Decimal]
+	UserID    tiqq.NumericColumn[AddressScope, int64, int64, tiqq.Decimal, tiqq.Decimal]
+	CompanyID tiqq.NumericColumn[AddressScope, int64, int64, tiqq.Decimal, tiqq.Decimal]
 	Address   tiqq.Column[AddressScope, string, string]
 }
 
 type NullableAddressTableDef struct {
-	ID        tiqq.Column[AddressScope, sql.Null[int64], int64]
-	UserID    tiqq.Column[AddressScope, sql.Null[int64], int64]
-	CompanyID tiqq.Column[AddressScope, sql.Null[int64], int64]
+	ID        tiqq.NumericColumn[AddressScope, sql.Null[int64], int64, tiqq.Decimal, tiqq.Decimal]
+	UserID    tiqq.NumericColumn[AddressScope, sql.Null[int64], int64, tiqq.Decimal, tiqq.Decimal]
+	CompanyID tiqq.NumericColumn[AddressScope, sql.Null[int64], int64, tiqq.Decimal, tiqq.Decimal]
 	Address   tiqq.Column[AddressScope, sql.Null[string], string]
 }
 
 var AddressTable = AddressTableDef{
 	ref:       tiqq.NewTableRef("addresses"),
-	ID:        tiqq.RequiredColumn[AddressScope, int64]("addresses", "id"),
-	UserID:    tiqq.RequiredColumn[AddressScope, int64]("addresses", "user_id"),
-	CompanyID: tiqq.RequiredColumn[AddressScope, int64]("addresses", "company_id"),
+	ID:        tiqq.RequiredNumericColumn[AddressScope, int64, tiqq.Decimal, tiqq.Decimal]("addresses", "id"),
+	UserID:    tiqq.RequiredNumericColumn[AddressScope, int64, tiqq.Decimal, tiqq.Decimal]("addresses", "user_id"),
+	CompanyID: tiqq.RequiredNumericColumn[AddressScope, int64, tiqq.Decimal, tiqq.Decimal]("addresses", "company_id"),
 	Address:   tiqq.RequiredColumn[AddressScope, string]("addresses", "address"),
 }
 
 func (table AddressTableDef) TiqqTableInfo() tiqq.TableInfo[AddressTableDef, NullableAddressTableDef] {
 	return tiqq.NewTableInfo(table.ref, table, NullableAddressTableDef{
-		ID:        tiqq.RebindNullable[AddressScope, AddressScope](table.ID),
-		UserID:    tiqq.RebindNullable[AddressScope, AddressScope](table.UserID),
-		CompanyID: tiqq.RebindNullable[AddressScope, AddressScope](table.CompanyID),
+		ID:        tiqq.RebindNullableNumeric[AddressScope, AddressScope](table.ID),
+		UserID:    tiqq.RebindNullableNumeric[AddressScope, AddressScope](table.UserID),
+		CompanyID: tiqq.RebindNullableNumeric[AddressScope, AddressScope](table.CompanyID),
 		Address:   tiqq.RebindNullable[AddressScope, AddressScope](table.Address),
 	}, []tiqq.ForeignKey{{Columns: []string{"user_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}}, {Columns: []string{"company_id"}, ReferencedTable: "companies", ReferencedColumns: []string{"id"}}})
 }
@@ -56,6 +56,9 @@ func (table AddressTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 func (table AddressTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 	return tiqq.NewTableQuery(table).Select(columns...)
 }
+func (table AddressTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
+	return tiqq.NewTableQuery(table).GroupBy(columns...)
+}
 func (table AddressTableDef) Update() tiqq.UpdateQuery[AddressScope] {
 	return tiqq.NewUpdate[AddressScope](table)
 }
@@ -64,9 +67,9 @@ func (table AddressTableDef) Insert() tiqq.InsertQuery[AddressScope] {
 }
 func (table AddressTableDef) As(alias string) AddressTableDef {
 	table.ref = table.ref.As(alias)
-	table.ID = tiqq.AliasColumn[AddressScope, AddressScope](table.ID, alias)
-	table.UserID = tiqq.AliasColumn[AddressScope, AddressScope](table.UserID, alias)
-	table.CompanyID = tiqq.AliasColumn[AddressScope, AddressScope](table.CompanyID, alias)
+	table.ID = tiqq.AliasNumericColumn[AddressScope, AddressScope](table.ID, alias)
+	table.UserID = tiqq.AliasNumericColumn[AddressScope, AddressScope](table.UserID, alias)
+	table.CompanyID = tiqq.AliasNumericColumn[AddressScope, AddressScope](table.CompanyID, alias)
 	table.Address = tiqq.AliasColumn[AddressScope, AddressScope](table.Address, alias)
 	return table
 }
@@ -75,31 +78,31 @@ type AuditLogScope struct{}
 
 type AuditLogTableDef struct {
 	ref     tiqq.TableRef
-	ID      tiqq.Column[AuditLogScope, int64, int64]
-	ActorID tiqq.Column[AuditLogScope, int64, int64]
+	ID      tiqq.NumericColumn[AuditLogScope, int64, int64, tiqq.Decimal, tiqq.Decimal]
+	ActorID tiqq.NumericColumn[AuditLogScope, int64, int64, tiqq.Decimal, tiqq.Decimal]
 	Active  tiqq.Column[AuditLogScope, bool, bool]
 	Message tiqq.Column[AuditLogScope, string, string]
 }
 
 type NullableAuditLogTableDef struct {
-	ID      tiqq.Column[AuditLogScope, sql.Null[int64], int64]
-	ActorID tiqq.Column[AuditLogScope, sql.Null[int64], int64]
+	ID      tiqq.NumericColumn[AuditLogScope, sql.Null[int64], int64, tiqq.Decimal, tiqq.Decimal]
+	ActorID tiqq.NumericColumn[AuditLogScope, sql.Null[int64], int64, tiqq.Decimal, tiqq.Decimal]
 	Active  tiqq.Column[AuditLogScope, sql.Null[bool], bool]
 	Message tiqq.Column[AuditLogScope, sql.Null[string], string]
 }
 
 var AuditLogTable = AuditLogTableDef{
 	ref:     tiqq.NewTableRef("audit_logs"),
-	ID:      tiqq.RequiredColumn[AuditLogScope, int64]("audit_logs", "id"),
-	ActorID: tiqq.RequiredColumn[AuditLogScope, int64]("audit_logs", "actor_id"),
+	ID:      tiqq.RequiredNumericColumn[AuditLogScope, int64, tiqq.Decimal, tiqq.Decimal]("audit_logs", "id"),
+	ActorID: tiqq.RequiredNumericColumn[AuditLogScope, int64, tiqq.Decimal, tiqq.Decimal]("audit_logs", "actor_id"),
 	Active:  tiqq.RequiredColumn[AuditLogScope, bool]("audit_logs", "active"),
 	Message: tiqq.RequiredColumn[AuditLogScope, string]("audit_logs", "message"),
 }
 
 func (table AuditLogTableDef) TiqqTableInfo() tiqq.TableInfo[AuditLogTableDef, NullableAuditLogTableDef] {
 	return tiqq.NewTableInfo(table.ref, table, NullableAuditLogTableDef{
-		ID:      tiqq.RebindNullable[AuditLogScope, AuditLogScope](table.ID),
-		ActorID: tiqq.RebindNullable[AuditLogScope, AuditLogScope](table.ActorID),
+		ID:      tiqq.RebindNullableNumeric[AuditLogScope, AuditLogScope](table.ID),
+		ActorID: tiqq.RebindNullableNumeric[AuditLogScope, AuditLogScope](table.ActorID),
 		Active:  tiqq.RebindNullable[AuditLogScope, AuditLogScope](table.Active),
 		Message: tiqq.RebindNullable[AuditLogScope, AuditLogScope](table.Message),
 	}, []tiqq.ForeignKey{})
@@ -120,6 +123,9 @@ func (table AuditLogTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 func (table AuditLogTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 	return tiqq.NewTableQuery(table).Select(columns...)
 }
+func (table AuditLogTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
+	return tiqq.NewTableQuery(table).GroupBy(columns...)
+}
 func (table AuditLogTableDef) Update() tiqq.UpdateQuery[AuditLogScope] {
 	return tiqq.NewUpdate[AuditLogScope](table)
 }
@@ -128,8 +134,8 @@ func (table AuditLogTableDef) Insert() tiqq.InsertQuery[AuditLogScope] {
 }
 func (table AuditLogTableDef) As(alias string) AuditLogTableDef {
 	table.ref = table.ref.As(alias)
-	table.ID = tiqq.AliasColumn[AuditLogScope, AuditLogScope](table.ID, alias)
-	table.ActorID = tiqq.AliasColumn[AuditLogScope, AuditLogScope](table.ActorID, alias)
+	table.ID = tiqq.AliasNumericColumn[AuditLogScope, AuditLogScope](table.ID, alias)
+	table.ActorID = tiqq.AliasNumericColumn[AuditLogScope, AuditLogScope](table.ActorID, alias)
 	table.Active = tiqq.AliasColumn[AuditLogScope, AuditLogScope](table.Active, alias)
 	table.Message = tiqq.AliasColumn[AuditLogScope, AuditLogScope](table.Message, alias)
 	return table
@@ -139,24 +145,24 @@ type CompanyScope struct{}
 
 type CompanyTableDef struct {
 	ref  tiqq.TableRef
-	ID   tiqq.Column[CompanyScope, int64, int64]
+	ID   tiqq.NumericColumn[CompanyScope, int64, int64, tiqq.Decimal, tiqq.Decimal]
 	Name tiqq.Column[CompanyScope, string, string]
 }
 
 type NullableCompanyTableDef struct {
-	ID   tiqq.Column[CompanyScope, sql.Null[int64], int64]
+	ID   tiqq.NumericColumn[CompanyScope, sql.Null[int64], int64, tiqq.Decimal, tiqq.Decimal]
 	Name tiqq.Column[CompanyScope, sql.Null[string], string]
 }
 
 var CompanyTable = CompanyTableDef{
 	ref:  tiqq.NewTableRef("companies"),
-	ID:   tiqq.RequiredColumn[CompanyScope, int64]("companies", "id"),
+	ID:   tiqq.RequiredNumericColumn[CompanyScope, int64, tiqq.Decimal, tiqq.Decimal]("companies", "id"),
 	Name: tiqq.RequiredColumn[CompanyScope, string]("companies", "name"),
 }
 
 func (table CompanyTableDef) TiqqTableInfo() tiqq.TableInfo[CompanyTableDef, NullableCompanyTableDef] {
 	return tiqq.NewTableInfo(table.ref, table, NullableCompanyTableDef{
-		ID:   tiqq.RebindNullable[CompanyScope, CompanyScope](table.ID),
+		ID:   tiqq.RebindNullableNumeric[CompanyScope, CompanyScope](table.ID),
 		Name: tiqq.RebindNullable[CompanyScope, CompanyScope](table.Name),
 	}, []tiqq.ForeignKey{})
 }
@@ -176,6 +182,9 @@ func (table CompanyTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 func (table CompanyTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 	return tiqq.NewTableQuery(table).Select(columns...)
 }
+func (table CompanyTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
+	return tiqq.NewTableQuery(table).GroupBy(columns...)
+}
 func (table CompanyTableDef) Update() tiqq.UpdateQuery[CompanyScope] {
 	return tiqq.NewUpdate[CompanyScope](table)
 }
@@ -184,7 +193,7 @@ func (table CompanyTableDef) Insert() tiqq.InsertQuery[CompanyScope] {
 }
 func (table CompanyTableDef) As(alias string) CompanyTableDef {
 	table.ref = table.ref.As(alias)
-	table.ID = tiqq.AliasColumn[CompanyScope, CompanyScope](table.ID, alias)
+	table.ID = tiqq.AliasNumericColumn[CompanyScope, CompanyScope](table.ID, alias)
 	table.Name = tiqq.AliasColumn[CompanyScope, CompanyScope](table.Name, alias)
 	return table
 }
@@ -193,29 +202,29 @@ type UserScope struct{}
 
 type UserTableDef struct {
 	ref       tiqq.TableRef
-	ID        tiqq.Column[UserScope, int64, int64]
+	ID        tiqq.NumericColumn[UserScope, int64, int64, tiqq.Decimal, tiqq.Decimal]
 	Name      tiqq.Column[UserScope, string, string]
-	ManagerID tiqq.Column[UserScope, sql.Null[int64], int64]
+	ManagerID tiqq.NumericColumn[UserScope, sql.Null[int64], int64, tiqq.Decimal, tiqq.Decimal]
 }
 
 type NullableUserTableDef struct {
-	ID        tiqq.Column[UserScope, sql.Null[int64], int64]
+	ID        tiqq.NumericColumn[UserScope, sql.Null[int64], int64, tiqq.Decimal, tiqq.Decimal]
 	Name      tiqq.Column[UserScope, sql.Null[string], string]
-	ManagerID tiqq.Column[UserScope, sql.Null[int64], int64]
+	ManagerID tiqq.NumericColumn[UserScope, sql.Null[int64], int64, tiqq.Decimal, tiqq.Decimal]
 }
 
 var UserTable = UserTableDef{
 	ref:       tiqq.NewTableRef("users"),
-	ID:        tiqq.RequiredColumn[UserScope, int64]("users", "id"),
+	ID:        tiqq.RequiredNumericColumn[UserScope, int64, tiqq.Decimal, tiqq.Decimal]("users", "id"),
 	Name:      tiqq.RequiredColumn[UserScope, string]("users", "name"),
-	ManagerID: tiqq.NullableColumn[UserScope, int64]("users", "manager_id"),
+	ManagerID: tiqq.NullableNumericColumn[UserScope, int64, tiqq.Decimal, tiqq.Decimal]("users", "manager_id"),
 }
 
 func (table UserTableDef) TiqqTableInfo() tiqq.TableInfo[UserTableDef, NullableUserTableDef] {
 	return tiqq.NewTableInfo(table.ref, table, NullableUserTableDef{
-		ID:        tiqq.RebindNullable[UserScope, UserScope](table.ID),
+		ID:        tiqq.RebindNullableNumeric[UserScope, UserScope](table.ID),
 		Name:      tiqq.RebindNullable[UserScope, UserScope](table.Name),
-		ManagerID: tiqq.RebindExistingNullable[UserScope, UserScope](table.ManagerID),
+		ManagerID: tiqq.RebindExistingNullableNumeric[UserScope, UserScope](table.ManagerID),
 	}, []tiqq.ForeignKey{{Columns: []string{"manager_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}}})
 }
 
@@ -234,6 +243,9 @@ func (table UserTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 func (table UserTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 	return tiqq.NewTableQuery(table).Select(columns...)
 }
+func (table UserTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
+	return tiqq.NewTableQuery(table).GroupBy(columns...)
+}
 func (table UserTableDef) Update() tiqq.UpdateQuery[UserScope] {
 	return tiqq.NewUpdate[UserScope](table)
 }
@@ -242,8 +254,8 @@ func (table UserTableDef) Insert() tiqq.InsertQuery[UserScope] {
 }
 func (table UserTableDef) As(alias string) UserTableDef {
 	table.ref = table.ref.As(alias)
-	table.ID = tiqq.AliasColumn[UserScope, UserScope](table.ID, alias)
+	table.ID = tiqq.AliasNumericColumn[UserScope, UserScope](table.ID, alias)
 	table.Name = tiqq.AliasColumn[UserScope, UserScope](table.Name, alias)
-	table.ManagerID = tiqq.AliasColumn[UserScope, UserScope](table.ManagerID, alias)
+	table.ManagerID = tiqq.AliasNumericColumn[UserScope, UserScope](table.ManagerID, alias)
 	return table
 }

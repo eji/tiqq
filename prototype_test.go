@@ -65,8 +65,8 @@ func TestInnerJoin(t *testing.T) {
 	)
 	require.Equal(t, []any{"Tokyo%"}, stmt.Args())
 	require.NoError(t, err)
-	require.Equal(t, int64(100), row.Get(j.Left().ID))
-	require.Equal(t, "Tokyo", row.Get(j.Right().Address))
+	require.Equal(t, int64(100), row.MustGet(j.Left().ID))
+	require.Equal(t, "Tokyo", row.MustGet(j.Right().Address))
 }
 
 func TestLeftJoinInfersForeignKey(t *testing.T) {
@@ -162,9 +162,9 @@ func TestMultiStageLeftJoin(t *testing.T) {
 	)
 	require.Equal(t, []any{int64(100)}, stmt.Args())
 	require.NoError(t, err)
-	require.Equal(t, int64(100), row.Get(joined.Left().Left().ID))
-	require.Equal(t, wantAddress, row.Get(joined.Left().Right().Address))
-	require.Equal(t, wantCompany, row.Get(joined.Right().Name))
+	require.Equal(t, int64(100), row.MustGet(joined.Left().Left().ID))
+	require.Equal(t, wantAddress, row.MustGet(joined.Left().Right().Address))
+	require.Equal(t, wantCompany, row.MustGet(joined.Right().Name))
 }
 
 func TestMultiStageJoinWithExplicitOn(t *testing.T) {
@@ -196,8 +196,8 @@ func TestMultiStageInnerJoin(t *testing.T) {
 
 	require.Contains(t, stmt.SQL(), `INNER JOIN "companies" ON "addresses"."company_id" = "companies"."id"`)
 	require.NoError(t, err)
-	require.Equal(t, wantAddress, row.Get(joined.Left().Right().Address))
-	require.Equal(t, "Acme", row.Get(joined.Right().Name))
+	require.Equal(t, wantAddress, row.MustGet(joined.Left().Right().Address))
+	require.Equal(t, "Acme", row.MustGet(joined.Right().Name))
 }
 
 func TestSelfJoinWithAliases(t *testing.T) {
@@ -218,9 +218,9 @@ func TestSelfJoinWithAliases(t *testing.T) {
 	)
 	require.Equal(t, []any{"A%"}, stmt.Args())
 	require.NoError(t, err)
-	require.Equal(t, int64(1), row.Get(j.Left().ID))
-	require.Equal(t, "Alice", row.Get(j.Left().Name))
-	require.Equal(t, wantManager, row.Get(j.Right().Name))
+	require.Equal(t, int64(1), row.MustGet(j.Left().ID))
+	require.Equal(t, "Alice", row.MustGet(j.Left().Name))
+	require.Equal(t, wantManager, row.MustGet(j.Right().Name))
 }
 
 func TestEmptyAliasPanics(t *testing.T) {
@@ -388,40 +388,42 @@ func TestTypedRowGet(t *testing.T) {
 	row, err := tiqq.NewRow(stmt, int64(100), "Alice", wantAddress)
 
 	require.NoError(t, err)
-	require.Equal(t, int64(100), row.Get(j.Left().ID))
-	require.Equal(t, "Alice", row.Get(j.Left().Name))
-	require.Equal(t, wantAddress, row.Get(j.Right().Address))
+	require.Equal(t, int64(100), row.MustGet(j.Left().ID))
+	require.Equal(t, "Alice", row.MustGet(j.Left().Name))
+	require.Equal(t, wantAddress, row.MustGet(j.Right().Address))
 }
 
 func TestRowValidation(t *testing.T) {
 	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 	tests := map[string]struct {
-		run       func()
-		wantPanic string
+		get  func() error
+		want string
 	}{
 		"column is absent from projection": {
-			run: func() {
+			get: func() error {
 				stmt := j.Select(j.Left().ID).MustBuild()
 				row, err := tiqq.NewRow(stmt, int64(1))
 				require.NoError(t, err)
-				row.Get(j.Left().Name)
+				_, err = row.Get(j.Left().Name)
+				return err
 			},
-			wantPanic: "tiqq: column users.name is not in the projection",
+			want: "tiqq: column users.name is not in the projection",
 		},
 		"driver value has wrong type": {
-			run: func() {
+			get: func() error {
 				stmt := j.Select(j.Left().ID).MustBuild()
 				row, err := tiqq.NewRow(stmt, "not an int64")
 				require.NoError(t, err)
-				row.Get(j.Left().ID)
+				_, err = row.Get(j.Left().ID)
+				return err
 			},
-			wantPanic: "tiqq: column users.id: cannot use string as int64",
+			want: "tiqq: column users.id: cannot use string as int64",
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			require.PanicsWithValue(t, test.wantPanic, test.run)
+			require.EqualError(t, test.get(), test.want)
 		})
 	}
 }

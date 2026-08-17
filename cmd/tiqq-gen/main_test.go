@@ -31,7 +31,7 @@ func TestRun(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, readErr)
 	require.Contains(t, string(generated), "package dbschema")
-	require.Contains(t, string(generated), "tiqq.Column[UserScope, int64, int64]")
+	require.Contains(t, string(generated), "tiqq.NumericColumn[UserScope, int64, int64, tiqq.Decimal, tiqq.Decimal]")
 }
 
 func TestRunPostgresCLI(t *testing.T) {

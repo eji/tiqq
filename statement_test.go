@@ -25,8 +25,8 @@ func TestScanRow(t *testing.T) {
 	}), stmt)
 
 	require.NoError(t, err)
-	require.Equal(t, int64(7), row.Get(j.Left().ID))
-	require.Equal(t, sql.Null[string]{V: "Tokyo", Valid: true}, row.Get(j.Right().Address))
+	require.Equal(t, int64(7), row.MustGet(j.Left().ID))
+	require.Equal(t, sql.Null[string]{V: "Tokyo", Valid: true}, row.MustGet(j.Right().Address))
 }
 
 func TestScanRowPreservesNull(t *testing.T) {
@@ -38,7 +38,7 @@ func TestScanRowPreservesNull(t *testing.T) {
 	}), stmt)
 
 	require.NoError(t, err)
-	require.Equal(t, sql.Null[string]{}, row.Get(j.Right().Address))
+	require.Equal(t, sql.Null[string]{}, row.MustGet(j.Right().Address))
 }
 
 func TestScanRowConvertsDriverInteger(t *testing.T) {
@@ -50,7 +50,7 @@ func TestScanRowConvertsDriverInteger(t *testing.T) {
 	}), stmt)
 
 	require.NoError(t, err)
-	require.Equal(t, sql.Null[int64]{V: 12, Valid: true}, row.Get(j.Right().ID))
+	require.Equal(t, sql.Null[int64]{V: 12, Valid: true}, row.MustGet(j.Right().ID))
 }
 
 func TestScanRowWrapsScannerError(t *testing.T) {

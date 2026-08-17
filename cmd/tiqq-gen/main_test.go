@@ -120,6 +120,82 @@ func TestRunPostgresCLIDoesNotExposeDSNOnOpenError(t *testing.T) {
 	require.NotContains(t, err.Error(), secret)
 }
 
+func TestRunMySQLCLI(t *testing.T) {
+	database, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = database.Close() })
+	mock.ExpectPing()
+	var output bytes.Buffer
+	wantSchema := schema.Schema{Dialect: schema.MySQL, Name: "app"}
+	dependencies := mysqlDependencies{
+		lookupEnv: func(name string) (string, bool) {
+			require.Equal(t, "TIQQ_MYSQL_DSN", name)
+			return "user:secret@tcp(example:3306)/app", true
+		},
+		open: func(dsn string) (*sql.DB, error) {
+			require.Equal(t, "user:secret@tcp(example:3306)/app", dsn)
+			return database, nil
+		},
+		introspect: func(ctx context.Context, gotDatabase *sql.DB, databaseName string) (schema.Schema, error) {
+			require.Same(t, database, gotDatabase)
+			require.Equal(t, "app", databaseName)
+			return wantSchema, nil
+		},
+		generate: func(gotSchema schema.Schema, config codegen.Config) ([]byte, error) {
+			require.Equal(t, wantSchema, gotSchema)
+			require.Equal(t, "dbschema", config.Package)
+			return []byte("generated"), nil
+		},
+		write:  writeGenerated,
+		stdout: &output,
+	}
+
+	err = runMySQLCLI([]string{
+		"-dsn-env", "TIQQ_MYSQL_DSN",
+		"-database", "app",
+		"-package", "dbschema",
+		"-output", "-",
+	}, dependencies)
+
+	require.NoError(t, err)
+	require.Equal(t, "generated", output.String())
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRunMySQLCLIValidation(t *testing.T) {
+	tests := map[string]struct {
+		arguments    []string
+		dependencies mysqlDependencies
+		want         string
+	}{
+		"database is required": {
+			want: "MySQL database name is required",
+		},
+		"DSN environment is required": {
+			arguments: []string{"-database", "app"},
+			dependencies: mysqlDependencies{
+				lookupEnv: func(name string) (string, bool) { return "", false },
+			},
+			want: "MySQL DSN environment variable MYSQL_DATABASE_URL is not set",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := runMySQLCLI(test.arguments, test.dependencies)
+			require.EqualError(t, err, test.want)
+		})
+	}
+}
+
+func TestDefaultMySQLOpenDoesNotExposeInvalidDSN(t *testing.T) {
+	secret := "user:super-secret@tcp(localhost:3306)/app?timeout=%zz"
+	_, err := defaultMySQLDependencies().open(secret)
+
+	require.EqualError(t, err, "invalid MySQL DSN")
+	require.NotContains(t, err.Error(), secret)
+}
+
 func TestDefaultPostgresOpenDoesNotExposeInvalidDSN(t *testing.T) {
 	secret := "postgres://user:super-secret@%"
 	_, err := defaultPostgresDependencies().open(secret)

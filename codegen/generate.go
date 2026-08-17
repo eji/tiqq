@@ -85,10 +85,10 @@ func writeTable(output *bytes.Buffer, table schema.Table, dialect schema.Dialect
 	for _, column := range table.Columns {
 		sumType, avgType, numeric := numericAggregateTypes(dialect, column.DBType)
 		constructor := "RequiredColumn"
-		typeArguments := fmt.Sprintf("%s, %s", scope, goType(dialect, column.DBType))
+		typeArguments := fmt.Sprintf("%s, %s", scope, goType(dialect, column))
 		if numeric {
 			constructor = "RequiredNumericColumn"
-			typeArguments = fmt.Sprintf("%s, %s, %s, %s", scope, goType(dialect, column.DBType), sumType, avgType)
+			typeArguments = fmt.Sprintf("%s, %s, %s, %s", scope, goType(dialect, column), sumType, avgType)
 		}
 		if column.Nullable {
 			constructor = "NullableColumn"
@@ -176,7 +176,7 @@ func uniqueColumns(table schema.Table) [][]string {
 }
 
 func columnType(dialect schema.Dialect, scope string, column schema.Column, outer bool) string {
-	value := goType(dialect, column.DBType)
+	value := goType(dialect, column)
 	if sumType, avgType, numeric := numericAggregateTypes(dialect, column.DBType); numeric {
 		if column.Nullable || outer {
 			return fmt.Sprintf("tiqq.NumericColumn[%s, sql.Null[%s], %s, %s, %s]", scope, value, value, sumType, avgType)
@@ -214,16 +214,29 @@ func numericAggregateTypes(dialect schema.Dialect, databaseType string) (string,
 	}
 }
 
-func goType(dialect schema.Dialect, databaseType string) string {
+func goType(dialect schema.Dialect, column schema.Column) string {
+	databaseType := column.DBType
 	if dialect == schema.MySQL {
 		switch databaseType {
 		case "tinyint":
+			if column.Unsigned {
+				return "uint8"
+			}
 			return "int8"
 		case "smallint":
+			if column.Unsigned {
+				return "uint16"
+			}
 			return "int16"
 		case "mediumint", "int", "integer":
+			if column.Unsigned {
+				return "uint32"
+			}
 			return "int32"
 		case "bigint":
+			if column.Unsigned {
+				return "uint64"
+			}
 			return "int64"
 		case "bool", "boolean":
 			return "bool"

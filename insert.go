@@ -87,7 +87,7 @@ func (query InsertQuery[S, D]) Build() (Statement, error) {
 	if query.conflict != nil && len(query.duplicate) > 0 {
 		return Statement{}, fmt.Errorf("tiqq: INSERT cannot combine ON CONFLICT and ON DUPLICATE KEY UPDATE")
 	}
-	if err := query.validateConflict(); err != nil {
+	if err := query.validateConflict(renderer); err != nil {
 		return Statement{}, err
 	}
 	if err := query.validateDuplicateKey(); err != nil {
@@ -190,7 +190,7 @@ func (query InsertQuery[S, D]) renderConflict(renderer sqlRenderer, builder *str
 	}
 }
 
-func (query InsertQuery[S, D]) validateConflict() error {
+func (query InsertQuery[S, D]) validateConflict(renderer sqlRenderer) error {
 	if query.conflict == nil {
 		return nil
 	}
@@ -198,7 +198,9 @@ func (query InsertQuery[S, D]) validateConflict() error {
 		if query.conflict.doNothing {
 			return nil
 		}
-		return fmt.Errorf("tiqq: ON CONFLICT DO UPDATE requires a conflict target")
+		if renderer.name() != "sqlite" {
+			return fmt.Errorf("tiqq: ON CONFLICT DO UPDATE requires a conflict target")
+		}
 	}
 	seen := make(map[string]bool, len(query.conflict.target))
 	for _, column := range query.conflict.target {
@@ -210,16 +212,18 @@ func (query InsertQuery[S, D]) validateConflict() error {
 		}
 		seen[column.name] = true
 	}
-	matched := false
-	for _, key := range query.uniqueKeys {
-		keyColumns := make(map[string]bool, len(key))
-		for _, column := range key {
-			keyColumns[column] = true
+	if len(seen) > 0 {
+		matched := false
+		for _, key := range query.uniqueKeys {
+			keyColumns := make(map[string]bool, len(key))
+			for _, column := range key {
+				keyColumns[column] = true
+			}
+			matched = matched || len(keyColumns) == len(seen) && sameColumnSet(keyColumns, seen)
 		}
-		matched = matched || len(keyColumns) == len(seen) && sameColumnSet(keyColumns, seen)
-	}
-	if !matched {
-		return fmt.Errorf("tiqq: ON CONFLICT target does not match a primary key or unique constraint")
+		if !matched {
+			return fmt.Errorf("tiqq: ON CONFLICT target does not match a primary key or unique constraint")
+		}
 	}
 	if !query.conflict.doNothing && len(query.conflict.assignments) == 0 {
 		return fmt.Errorf("tiqq: ON CONFLICT DO UPDATE requires at least one assignment")
@@ -299,7 +303,7 @@ func conflictColumns[S any](columns []ConflictColumn[S]) []columnRef {
 	return result
 }
 
-// ExcludedAssignment creates a PostgreSQL incoming-row assignment for dialect packages.
+// ExcludedAssignment creates an SQL EXCLUDED incoming-row assignment for dialect packages.
 func ExcludedAssignment[S any](column ConflictColumn[S]) Assignment[S] {
 	return Assignment[S]{column: column.conflictColumn(*new(S)), excluded: true}
 }

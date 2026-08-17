@@ -132,6 +132,24 @@ j := UserTable.LeftJoin(AuditLogTable).On(
 Column value and comparison types are checked by the compiler. `Build` checks
 that `ON`, `WHERE`, and `SELECT` columns belong to the query.
 
+Go rejects a recursively growing generic method result as an instantiation
+cycle, so subsequent joins use the same top-level constructor that generated
+table methods delegate to:
+
+```go
+userAddress := UserTable.LeftJoin(AddressTable)
+joined := tiqq.LeftJoin(userAddress, CompanyTable)
+
+query := joined.Select(
+	joined.Left().Left().ID,
+	joined.Left().Right().Address,
+	joined.Right().Name,
+)
+```
+
+The binary type tree and outer-join nullability remain intact even though the
+second join cannot use method syntax.
+
 It can also be used with `go generate` without putting credentials in source or
 process arguments:
 

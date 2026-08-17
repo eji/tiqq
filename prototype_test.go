@@ -133,6 +133,66 @@ func TestJoinBuildValidation(t *testing.T) {
 	}
 }
 
+func TestMultiStageLeftJoin(t *testing.T) {
+	userAddress := UserTable.LeftJoin(AddressTable)
+	joined := tiqq.LeftJoin(userAddress, CompanyTable)
+	stmt := joined.
+		Where(joined.Left().Left().ID.Eq(100)).
+		Select(
+			joined.Left().Left().ID,
+			joined.Left().Right().Address,
+			joined.Right().Name,
+		).
+		Build()
+	wantAddress := sql.Null[string]{V: "Tokyo", Valid: true}
+	wantCompany := sql.Null[string]{V: "Acme", Valid: true}
+	row, err := tiqq.NewRow(stmt, int64(100), wantAddress, wantCompany)
+
+	require.Equal(
+		t,
+		`SELECT "users"."id", "addresses"."address", "companies"."name" FROM "users" LEFT JOIN "addresses" ON "addresses"."user_id" = "users"."id" LEFT JOIN "companies" ON "addresses"."company_id" = "companies"."id" WHERE "users"."id" = $1`,
+		stmt.SQL(),
+	)
+	require.Equal(t, []any{int64(100)}, stmt.Args())
+	require.NoError(t, err)
+	require.Equal(t, int64(100), row.Get(joined.Left().Left().ID))
+	require.Equal(t, wantAddress, row.Get(joined.Left().Right().Address))
+	require.Equal(t, wantCompany, row.Get(joined.Right().Name))
+}
+
+func TestMultiStageJoinWithExplicitOn(t *testing.T) {
+	userAddress := UserTable.LeftJoin(AddressTable)
+	userAddressCompany := tiqq.LeftJoin(userAddress, CompanyTable)
+	joined := tiqq.LeftJoin(userAddressCompany, AuditLogTable).On(
+		tiqq.Eq(userAddressCompany.Left().Left().ID, AuditLogTable.ActorID),
+		AuditLogTable.Active.Eq(true),
+	)
+	stmt := joined.Select(
+		joined.Left().Left().Left().ID,
+		joined.Right().Message,
+	).Build()
+
+	require.Contains(
+		t,
+		stmt.SQL(),
+		`LEFT JOIN "audit_logs" ON "users"."id" = "audit_logs"."actor_id" AND "audit_logs"."active" = $1`,
+	)
+	require.Equal(t, []any{true}, stmt.Args())
+}
+
+func TestMultiStageInnerJoin(t *testing.T) {
+	userAddress := UserTable.LeftJoin(AddressTable)
+	joined := tiqq.InnerJoin(userAddress, CompanyTable)
+	stmt := joined.Select(joined.Left().Right().Address, joined.Right().Name).Build()
+	wantAddress := sql.Null[string]{V: "Tokyo", Valid: true}
+	row, err := tiqq.NewRow(stmt, wantAddress, "Acme")
+
+	require.Contains(t, stmt.SQL(), `INNER JOIN "companies" ON "addresses"."company_id" = "companies"."id"`)
+	require.NoError(t, err)
+	require.Equal(t, wantAddress, row.Get(joined.Left().Right().Address))
+	require.Equal(t, "Acme", row.Get(joined.Right().Name))
+}
+
 func TestSelfJoinWithAliases(t *testing.T) {
 	employee := UserTable.As("employee")
 	manager := UserTable.As("manager")

@@ -184,3 +184,18 @@ func TestDeleteDialectRendering(t *testing.T) {
 		})
 	}
 }
+
+func TestMySQLRejectsFullJoin(t *testing.T) {
+	schema := NewSchemaInfo(MySQL)
+	users := tableSource{ref: schema.Table("users")}
+	addresses := tableSource{ref: schema.Table("addresses")}
+	id := RequiredNumericColumn[mysqlScope, int64, Decimal, Decimal]("users", "id")
+	query := NewQuery(source{
+		tables: []tableSource{users, addresses},
+		joins:  []joinClause{{kind: "FULL JOIN", right: addresses}},
+	}).Select(id)
+
+	_, err := query.Build()
+
+	require.EqualError(t, err, "tiqq: mysql does not support FULL JOIN")
+}

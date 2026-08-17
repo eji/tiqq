@@ -5,8 +5,9 @@ contains the first prototype: typed columns and predicates, explicit SELECT,
 JOIN scope rebinding, dialect-aware placeholders, projection metadata, and
 typed result access.
 
-The prototype supports `InnerJoin` and `LeftJoin`. An inner join keeps both
-branches non-nullable; a left join makes columns from its right branch nullable.
+The prototype supports `InnerJoin`, `LeftJoin`, `RightJoin`, `FullJoin`, and
+`CrossJoin`. Outer joins make the affected branches nullable. MySQL rejects
+`FullJoin` at `Build` because the dialect does not support it.
 
 ## Development environment
 

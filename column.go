@@ -69,6 +69,35 @@ func (c Column[S, V, C]) Lt(value C) Predicate   { return comparison(c.ref, "<",
 func (c Column[S, V, C]) Lte(value C) Predicate  { return comparison(c.ref, "<=", value) }
 func (c Column[S, V, C]) Like(value C) Predicate { return comparison(c.ref, "LIKE", value) }
 
+func (c Column[S, V, C]) In(values ...C) Predicate {
+	return listPredicate(c.ref, "IN", values)
+}
+
+func (c Column[S, V, C]) NotIn(values ...C) Predicate {
+	return listPredicate(c.ref, "NOT IN", values)
+}
+
+func (c Column[S, V, C]) IsNull() Predicate {
+	return Predicate{node: predicateNode{kind: nullComparison, left: c.ref, op: "IS NULL"}}
+}
+
+func (c Column[S, V, C]) IsNotNull() Predicate {
+	return Predicate{node: predicateNode{kind: nullComparison, left: c.ref, op: "IS NOT NULL"}}
+}
+
+func listPredicate[C any](column columnRef, operator string, values []C) Predicate {
+	if len(values) == 0 {
+		panic("tiqq: " + operator + " requires at least one value")
+	}
+	arguments := make([]any, len(values))
+	for index, value := range values {
+		arguments[index] = value
+	}
+	return Predicate{node: predicateNode{
+		kind: listComparison, left: column, op: operator, values: arguments,
+	}}
+}
+
 func (c Column[S, V, C]) selection() columnRef { return c.ref }
 
 // Selection is the closed set of selectable expressions for scope S.

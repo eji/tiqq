@@ -19,8 +19,21 @@ type columnRef struct {
 
 // Assignment is a type-safe UPDATE assignment for scope S.
 type Assignment[S any] struct {
-	column columnRef
-	value  any
+	column   columnRef
+	value    any
+	excluded bool
+}
+
+func (assignment Assignment[S]) updateValue(S) Assignment[S] { return assignment }
+
+// UpdateValue is the closed set of typed values accepted by an update action.
+type UpdateValue[S any] interface {
+	updateValue(S) Assignment[S]
+}
+
+// ConflictColumn is a typed conflict-target column for table scope S.
+type ConflictColumn[S any] interface {
+	conflictColumn(S) columnRef
 }
 
 // InsertValue is a type-safe column/value pair for an INSERT statement.
@@ -135,10 +148,11 @@ func listPredicate[C any](column columnRef, operator string, values []C) Predica
 	}}
 }
 
-func (c Column[S, V, C]) selection() columnRef      { return c.ref }
-func (c Column[S, V, C]) resultRef() columnRef      { return c.ref }
-func (c Column[S, V, C]) resultValue(V)             {}
-func (c Column[S, V, C]) comparisonRef(C) columnRef { return c.ref }
+func (c Column[S, V, C]) selection() columnRef       { return c.ref }
+func (c Column[S, V, C]) resultRef() columnRef       { return c.ref }
+func (c Column[S, V, C]) resultValue(V)              {}
+func (c Column[S, V, C]) comparisonRef(C) columnRef  { return c.ref }
+func (c Column[S, V, C]) conflictColumn(S) columnRef { return c.ref }
 
 // Selection is the closed set of selectable expressions for scope S.
 type Selection interface {

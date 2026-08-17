@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/eji/tiqq"
+	"github.com/eji/tiqq/postgres"
 )
 
 var tiqqSchema = tiqq.NewSchemaInfo(tiqq.PostgreSQL)
@@ -64,8 +65,8 @@ func (table AddressTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
 func (table AddressTableDef) Update() tiqq.UpdateQuery[AddressScope] {
 	return tiqq.NewUpdate[AddressScope](table)
 }
-func (table AddressTableDef) Insert() tiqq.InsertQuery[AddressScope] {
-	return tiqq.NewInsert[AddressScope](table.ref, []string{"id", "user_id", "company_id", "address"}, []string{"id", "user_id", "company_id", "address"})
+func (table AddressTableDef) Insert() postgres.InsertQuery[AddressScope] {
+	return postgres.NewInsert(tiqq.NewInsert[AddressScope, tiqq.PostgreSQLMarker](table.ref, []string{"id", "user_id", "company_id", "address"}, []string{"id", "user_id", "company_id", "address"}, [][]string{{"id"}}))
 }
 func (table AddressTableDef) As(alias string) AddressTableDef {
 	table.ref = table.ref.As(alias)
@@ -131,8 +132,8 @@ func (table AuditLogTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
 func (table AuditLogTableDef) Update() tiqq.UpdateQuery[AuditLogScope] {
 	return tiqq.NewUpdate[AuditLogScope](table)
 }
-func (table AuditLogTableDef) Insert() tiqq.InsertQuery[AuditLogScope] {
-	return tiqq.NewInsert[AuditLogScope](table.ref, []string{"id", "actor_id", "active", "message"}, []string{"id", "actor_id", "active", "message"})
+func (table AuditLogTableDef) Insert() postgres.InsertQuery[AuditLogScope] {
+	return postgres.NewInsert(tiqq.NewInsert[AuditLogScope, tiqq.PostgreSQLMarker](table.ref, []string{"id", "actor_id", "active", "message"}, []string{"id", "actor_id", "active", "message"}, [][]string{{"id"}}))
 }
 func (table AuditLogTableDef) As(alias string) AuditLogTableDef {
 	table.ref = table.ref.As(alias)
@@ -190,8 +191,8 @@ func (table CompanyTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
 func (table CompanyTableDef) Update() tiqq.UpdateQuery[CompanyScope] {
 	return tiqq.NewUpdate[CompanyScope](table)
 }
-func (table CompanyTableDef) Insert() tiqq.InsertQuery[CompanyScope] {
-	return tiqq.NewInsert[CompanyScope](table.ref, []string{"id", "name"}, []string{"id", "name"})
+func (table CompanyTableDef) Insert() postgres.InsertQuery[CompanyScope] {
+	return postgres.NewInsert(tiqq.NewInsert[CompanyScope, tiqq.PostgreSQLMarker](table.ref, []string{"id", "name"}, []string{"id", "name"}, [][]string{{"id"}}))
 }
 func (table CompanyTableDef) As(alias string) CompanyTableDef {
 	table.ref = table.ref.As(alias)
@@ -251,8 +252,8 @@ func (table UserTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
 func (table UserTableDef) Update() tiqq.UpdateQuery[UserScope] {
 	return tiqq.NewUpdate[UserScope](table)
 }
-func (table UserTableDef) Insert() tiqq.InsertQuery[UserScope] {
-	return tiqq.NewInsert[UserScope](table.ref, []string{"id", "name", "manager_id"}, []string{"id", "name"})
+func (table UserTableDef) Insert() postgres.InsertQuery[UserScope] {
+	return postgres.NewInsert(tiqq.NewInsert[UserScope, tiqq.PostgreSQLMarker](table.ref, []string{"id", "name", "manager_id"}, []string{"id", "name"}, [][]string{{"id"}}))
 }
 func (table UserTableDef) As(alias string) UserTableDef {
 	table.ref = table.ref.As(alias)

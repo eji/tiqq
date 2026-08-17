@@ -24,20 +24,18 @@ func newStatement(text string, args []any, projection []columnRef) Statement {
 func (s Statement) SQL() string { return s.sql }
 func (s Statement) Args() []any { return append([]any(nil), s.args...) }
 
-// Row stores values scanned in projection order. Adapters can construct it
-// after database/sql or pgx scanning.
+// Row stores values scanned in projection order.
 type Row struct {
 	statement Statement
 	values    []any
 }
 
-// Scanner is implemented by *database/sql.Row, *database/sql.Rows, and
-// compatible adapters.
+// Scanner is implemented by database/sql and pgx Row and Rows types.
 type Scanner interface {
 	Scan(dest ...any) error
 }
 
-// ScanRow scans the current database row in projection order.
+// ScanRow scans a database/sql or pgx row using the statement's projection.
 func ScanRow(scanner Scanner, statement Statement) (Row, error) {
 	values := make([]any, len(statement.projection))
 	destinations := make([]any, len(values))

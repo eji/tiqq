@@ -45,8 +45,8 @@ func TestGenerate(t *testing.T) {
 	require.Contains(t, source, "func (table UserTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]]")
 	require.Contains(t, source, "func (table UserTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]]")
 	require.Contains(t, source, "func (table UserTableDef) Update() tiqq.UpdateQuery[UserScope]")
-	require.Contains(t, source, "func (table UserTableDef) Insert(values ...tiqq.InsertValue[UserScope])")
-	require.Contains(t, source, `tiqq.NewInsert(table.ref, []string{"id", "display_name", "balance"}, []string{"id", "display_name", "balance"}, values...)`)
+	require.Contains(t, source, "func (table UserTableDef) Insert() tiqq.InsertQuery[UserScope]")
+	require.Contains(t, source, `tiqq.NewInsert[UserScope](table.ref, []string{"id", "display_name", "balance"}, []string{"id", "display_name", "balance"})`)
 	require.Contains(t, source, `Columns: []string{"user_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}`)
 }
 
@@ -148,7 +148,7 @@ func TestGenerateInsertMetadata(t *testing.T) {
 	source := string(generated)
 
 	require.NoError(t, err)
-	require.Contains(t, source, `tiqq.NewInsert(table.ref, []string{"name", "nickname", "created_at"}, []string{"name"}, values...)`)
+	require.Contains(t, source, `tiqq.NewInsert[UserScope](table.ref, []string{"name", "nickname", "created_at"}, []string{"name"})`)
 }
 
 func stringPointer(value string) *string { return &value }

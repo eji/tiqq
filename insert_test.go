@@ -16,7 +16,7 @@ func TestInsertBuild(t *testing.T) {
 	}{
 		"single row": {
 			build: func() tiqq.Statement {
-				return UserTable.Insert(
+				return UserTable.Insert().Values(
 					UserTable.ID.Value(int64(1)),
 					UserTable.Name.Value("Alice"),
 				).MustBuild()
@@ -26,7 +26,7 @@ func TestInsertBuild(t *testing.T) {
 		},
 		"multiple rows": {
 			build: func() tiqq.Statement {
-				return UserTable.Insert(
+				return UserTable.Insert().Values(
 					UserTable.ID.Value(int64(1)),
 					UserTable.Name.Value("Alice"),
 				).Values(
@@ -39,7 +39,7 @@ func TestInsertBuild(t *testing.T) {
 		},
 		"nullable column accepts base value": {
 			build: func() tiqq.Statement {
-				return UserTable.Insert(
+				return UserTable.Insert().Values(
 					UserTable.ID.Value(int64(1)),
 					UserTable.Name.Value("Alice"),
 					UserTable.ManagerID.Value(int64(9)),
@@ -73,14 +73,14 @@ func TestInsertBuildValidation(t *testing.T) {
 		},
 		"required column is missing": {
 			build: func() error {
-				_, err := UserTable.Insert(UserTable.ID.Value(int64(1))).Build()
+				_, err := UserTable.Insert().Values(UserTable.ID.Value(int64(1))).Build()
 				return err
 			},
 			want: "tiqq: INSERT requires column name",
 		},
 		"column is duplicated": {
 			build: func() error {
-				_, err := UserTable.Insert(
+				_, err := UserTable.Insert().Values(
 					UserTable.ID.Value(int64(1)),
 					UserTable.ID.Value(int64(2)),
 					UserTable.Name.Value("Alice"),
@@ -91,7 +91,7 @@ func TestInsertBuildValidation(t *testing.T) {
 		},
 		"bulk column count must match": {
 			build: func() error {
-				_, err := UserTable.Insert(
+				_, err := UserTable.Insert().Values(
 					UserTable.ID.Value(int64(1)), UserTable.Name.Value("Alice"),
 				).Values(UserTable.ID.Value(int64(2))).Build()
 				return err
@@ -100,7 +100,7 @@ func TestInsertBuildValidation(t *testing.T) {
 		},
 		"bulk column order must match": {
 			build: func() error {
-				_, err := UserTable.Insert(
+				_, err := UserTable.Insert().Values(
 					UserTable.ID.Value(int64(1)), UserTable.Name.Value("Alice"),
 				).Values(
 					UserTable.Name.Value("Bob"), UserTable.ID.Value(int64(2)),
@@ -113,6 +113,7 @@ func TestInsertBuildValidation(t *testing.T) {
 			build: func() error {
 				query := tiqq.NewInsert[UserScope](
 					tiqq.NewTableRef("users"), []string{"name"}, []string{"name"},
+				).Values(
 					UserTable.ID.Value(int64(1)), UserTable.Name.Value("Alice"),
 				)
 				_, err := query.Build()

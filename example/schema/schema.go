@@ -59,8 +59,8 @@ func (table AddressTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 func (table AddressTableDef) Update() tiqq.UpdateQuery[AddressScope] {
 	return tiqq.NewUpdate[AddressScope](table)
 }
-func (table AddressTableDef) Insert(values ...tiqq.InsertValue[AddressScope]) tiqq.InsertQuery[AddressScope] {
-	return tiqq.NewInsert(table.ref, []string{"id", "user_id", "company_id", "address"}, []string{"id", "user_id", "company_id", "address"}, values...)
+func (table AddressTableDef) Insert() tiqq.InsertQuery[AddressScope] {
+	return tiqq.NewInsert[AddressScope](table.ref, []string{"id", "user_id", "company_id", "address"}, []string{"id", "user_id", "company_id", "address"})
 }
 func (table AddressTableDef) As(alias string) AddressTableDef {
 	table.ref = table.ref.As(alias)
@@ -123,8 +123,8 @@ func (table AuditLogTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 func (table AuditLogTableDef) Update() tiqq.UpdateQuery[AuditLogScope] {
 	return tiqq.NewUpdate[AuditLogScope](table)
 }
-func (table AuditLogTableDef) Insert(values ...tiqq.InsertValue[AuditLogScope]) tiqq.InsertQuery[AuditLogScope] {
-	return tiqq.NewInsert(table.ref, []string{"id", "actor_id", "active", "message"}, []string{"id", "actor_id", "active", "message"}, values...)
+func (table AuditLogTableDef) Insert() tiqq.InsertQuery[AuditLogScope] {
+	return tiqq.NewInsert[AuditLogScope](table.ref, []string{"id", "actor_id", "active", "message"}, []string{"id", "actor_id", "active", "message"})
 }
 func (table AuditLogTableDef) As(alias string) AuditLogTableDef {
 	table.ref = table.ref.As(alias)
@@ -179,8 +179,8 @@ func (table CompanyTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 func (table CompanyTableDef) Update() tiqq.UpdateQuery[CompanyScope] {
 	return tiqq.NewUpdate[CompanyScope](table)
 }
-func (table CompanyTableDef) Insert(values ...tiqq.InsertValue[CompanyScope]) tiqq.InsertQuery[CompanyScope] {
-	return tiqq.NewInsert(table.ref, []string{"id", "name"}, []string{"id", "name"}, values...)
+func (table CompanyTableDef) Insert() tiqq.InsertQuery[CompanyScope] {
+	return tiqq.NewInsert[CompanyScope](table.ref, []string{"id", "name"}, []string{"id", "name"})
 }
 func (table CompanyTableDef) As(alias string) CompanyTableDef {
 	table.ref = table.ref.As(alias)
@@ -237,8 +237,8 @@ func (table UserTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 func (table UserTableDef) Update() tiqq.UpdateQuery[UserScope] {
 	return tiqq.NewUpdate[UserScope](table)
 }
-func (table UserTableDef) Insert(values ...tiqq.InsertValue[UserScope]) tiqq.InsertQuery[UserScope] {
-	return tiqq.NewInsert(table.ref, []string{"id", "name", "manager_id"}, []string{"id", "name"}, values...)
+func (table UserTableDef) Insert() tiqq.InsertQuery[UserScope] {
+	return tiqq.NewInsert[UserScope](table.ref, []string{"id", "name", "manager_id"}, []string{"id", "name"})
 }
 func (table UserTableDef) As(alias string) UserTableDef {
 	table.ref = table.ref.As(alias)

@@ -74,7 +74,7 @@ Inserts use the same typed column/value pairing and can append rows for a bulk
 insert:
 
 ```go
-q := UserTable.Insert(
+q := UserTable.Insert().Values(
 	UserTable.ID.Value(1),
 	UserTable.Name.Value("Alice"),
 ).Values(

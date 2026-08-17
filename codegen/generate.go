@@ -98,7 +98,7 @@ func writeTable(output *bytes.Buffer, table schema.Table) {
 	fmt.Fprintf(output, "func (table %sTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query { return tiqq.NewTableQuery(table).Where(predicates...) }\n", typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) Select(columns ...tiqq.Selection) tiqq.Query { return tiqq.NewTableQuery(table).Select(columns...) }\n", typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) Update() tiqq.UpdateQuery[%s] { return tiqq.NewUpdate[%s](table) }\n", typeName, scope, scope)
-	fmt.Fprintf(output, "func (table %sTableDef) Insert(values ...tiqq.InsertValue[%s]) tiqq.InsertQuery[%s] { return tiqq.NewInsert(table.ref, %#v, %#v, values...) }\n", typeName, scope, scope, insertableColumns(table.Columns), requiredInsertColumns(table.Columns))
+	fmt.Fprintf(output, "func (table %sTableDef) Insert() tiqq.InsertQuery[%s] { return tiqq.NewInsert[%s](table.ref, %#v, %#v) }\n", typeName, scope, scope, insertableColumns(table.Columns), requiredInsertColumns(table.Columns))
 	fmt.Fprintf(output, "func (table %sTableDef) As(alias string) %sTableDef {\n", typeName, typeName)
 	output.WriteString("table.ref = table.ref.As(alias)\n")
 	for _, column := range table.Columns {

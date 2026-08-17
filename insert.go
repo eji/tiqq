@@ -14,13 +14,13 @@ type InsertQuery[S any] struct {
 }
 
 // NewInsert constructs an INSERT for generated code.
-func NewInsert[S any](table TableRef, insertable, required []string, values ...InsertValue[S]) InsertQuery[S] {
+func NewInsert[S any](table TableRef, insertable, required []string) InsertQuery[S] {
 	allowed := make(map[string]bool, len(insertable))
 	for _, column := range insertable {
 		allowed[column] = true
 	}
 	return InsertQuery[S]{
-		table: table, rows: [][]InsertValue[S]{appendCopy([]InsertValue[S](nil), values...)},
+		table:      table,
 		insertable: allowed, required: append([]string(nil), required...),
 	}
 }

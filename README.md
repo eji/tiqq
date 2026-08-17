@@ -132,6 +132,24 @@ j := UserTable.LeftJoin(AuditLogTable).On(
 Column value and comparison types are checked by the compiler. `Build` checks
 that `ON`, `WHERE`, and `SELECT` columns belong to the query.
 
+`ON` and `WHERE` share the same composable predicate API:
+
+```go
+query := joined.Where(
+	tiqq.And(
+		joined.Left().ID.In(10, 20, 30),
+		tiqq.Or(
+			joined.Left().Name.Like("A%"),
+			joined.Right().Address.IsNull(),
+		),
+		tiqq.Not(joined.Left().Name.Eq("Archived")),
+	),
+)
+```
+
+Available primitives include `And`, `Or`, `Not`, `In`, `NotIn`, `IsNull`, and
+`IsNotNull` in addition to typed value and column comparisons.
+
 Go rejects a recursively growing generic method result as an instantiation
 cycle, so subsequent joins use the same top-level constructor that generated
 table methods delegate to:

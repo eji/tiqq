@@ -112,7 +112,10 @@ func TestJoinBuildValidation(t *testing.T) {
 		"ON rejects unrelated table": {
 			build: func() {
 				joined := UserTable.LeftJoin(AuditLogTable).
-					On(tiqq.Eq(CompanyTable.ID, AuditLogTable.ActorID))
+					On(tiqq.Or(
+						tiqq.Eq(CompanyTable.ID, AuditLogTable.ActorID),
+						AuditLogTable.Active.Eq(true),
+					))
 				joined.Select(joined.Left().ID).Build()
 			},
 			wantPanic: "tiqq: ON column companies.id is not in query scope",
@@ -263,6 +266,105 @@ func TestPredicateOperators(t *testing.T) {
 			stmt := j.Select(j.Left().ID).Where(test.predicate).Build()
 			require.Contains(t, stmt.SQL(), " WHERE "+test.wantSQL)
 			require.Equal(t, []any{test.wantArg}, stmt.Args())
+		})
+	}
+}
+
+func TestPredicateExpressions(t *testing.T) {
+	j := UserTable.LeftJoin(AddressTable)
+	tests := map[string]struct {
+		predicate tiqq.Predicate
+		wantSQL   string
+		wantArgs  []any
+	}{
+		"and": {
+			predicate: tiqq.And(j.Left().ID.Gt(10), j.Left().ID.Lt(20)),
+			wantSQL:   `("users"."id" > $1 AND "users"."id" < $2)`,
+			wantArgs:  []any{int64(10), int64(20)},
+		},
+		"or": {
+			predicate: tiqq.Or(j.Left().Name.Eq("Alice"), j.Left().Name.Eq("Bob")),
+			wantSQL:   `("users"."name" = $1 OR "users"."name" = $2)`,
+			wantArgs:  []any{"Alice", "Bob"},
+		},
+		"not": {
+			predicate: tiqq.Not(j.Left().Name.Like("test%")),
+			wantSQL:   `NOT ("users"."name" LIKE $1)`,
+			wantArgs:  []any{"test%"},
+		},
+		"in": {
+			predicate: j.Left().ID.In(1, 2, 3),
+			wantSQL:   `"users"."id" IN ($1, $2, $3)`,
+			wantArgs:  []any{int64(1), int64(2), int64(3)},
+		},
+		"not in": {
+			predicate: j.Left().ID.NotIn(4, 5),
+			wantSQL:   `"users"."id" NOT IN ($1, $2)`,
+			wantArgs:  []any{int64(4), int64(5)},
+		},
+		"is null": {
+			predicate: j.Right().Address.IsNull(),
+			wantSQL:   `"addresses"."address" IS NULL`,
+		},
+		"is not null": {
+			predicate: j.Right().Address.IsNotNull(),
+			wantSQL:   `"addresses"."address" IS NOT NULL`,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			stmt := j.Select(j.Left().ID).Where(test.predicate).Build()
+			require.Contains(t, stmt.SQL(), " WHERE "+test.wantSQL)
+			require.Equal(t, test.wantArgs, stmt.Args())
+		})
+	}
+}
+
+func TestPredicateExpressionsInOn(t *testing.T) {
+	j := UserTable.LeftJoin(AuditLogTable).On(
+		tiqq.Eq(UserTable.ID, AuditLogTable.ActorID),
+		tiqq.Or(
+			AuditLogTable.Active.Eq(true),
+			AuditLogTable.Message.Like("security:%"),
+		),
+	)
+	stmt := j.Select(j.Left().ID).Where(j.Left().ID.In(10, 20)).Build()
+
+	require.Contains(
+		t,
+		stmt.SQL(),
+		`ON "users"."id" = "audit_logs"."actor_id" AND ("audit_logs"."active" = $1 OR "audit_logs"."message" LIKE $2) WHERE "users"."id" IN ($3, $4)`,
+	)
+	require.Equal(t, []any{true, "security:%", int64(10), int64(20)}, stmt.Args())
+}
+
+func TestPredicateExpressionValidation(t *testing.T) {
+	tests := map[string]struct {
+		build     func()
+		wantPanic string
+	}{
+		"empty AND": {
+			build:     func() { tiqq.And() },
+			wantPanic: "tiqq: AND requires at least one predicate",
+		},
+		"empty OR": {
+			build:     func() { tiqq.Or() },
+			wantPanic: "tiqq: OR requires at least one predicate",
+		},
+		"empty IN": {
+			build:     func() { UserTable.ID.In() },
+			wantPanic: "tiqq: IN requires at least one value",
+		},
+		"empty NOT IN": {
+			build:     func() { UserTable.ID.NotIn() },
+			wantPanic: "tiqq: NOT IN requires at least one value",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.PanicsWithValue(t, test.wantPanic, test.build)
 		})
 	}
 }

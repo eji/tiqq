@@ -5,31 +5,33 @@ import (
 	"strings"
 )
 
+type expressionKind uint8
+
+const (
+	valueComparison expressionKind = iota
+	columnComparison
+)
+
 type predicateNode struct {
-	column columnRef
-	op     string
-	value  any
+	kind        expressionKind
+	left        columnRef
+	op          string
+	rightColumn columnRef
+	value       any
 }
 
-// Predicate carries the scope in which it is valid.
-type Predicate[S any] struct{ node predicateNode }
+// Predicate is shared by ON and WHERE. Query membership is validated by Build.
+type Predicate struct{ node predicateNode }
 
-func comparison[S any](column columnRef, op string, value any) Predicate[S] {
-	return Predicate[S]{node: predicateNode{column: column, op: op, value: value}}
+func comparison(column columnRef, op string, value any) Predicate {
+	return Predicate{node: predicateNode{kind: valueComparison, left: column, op: op, value: value}}
 }
 
-type joinNode struct {
-	left  columnRef
-	op    string
-	right columnRef
-}
-
-// JoinCondition is created by On. Its type arguments prevent comparing
-// columns with different comparison types.
-type JoinCondition struct{ node joinNode }
-
-func On[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) JoinCondition {
-	return JoinCondition{node: joinNode{left: left.ref, op: "=", right: right.ref}}
+// Eq compares two columns with the same comparison type.
+func Eq[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+	return Predicate{node: predicateNode{
+		kind: columnComparison, left: left.ref, op: "=", rightColumn: right.ref,
+	}}
 }
 
 func quoteIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
@@ -38,10 +40,18 @@ func renderColumn(c columnRef) string {
 	return quoteIdent(c.qualifier) + "." + quoteIdent(c.name)
 }
 
-func renderJoin(j JoinCondition) string {
-	return renderColumn(j.node.left) + " " + j.node.op + " " + renderColumn(j.node.right)
+func renderPredicate(p Predicate, nextArg *int) (string, []any) {
+	if p.node.kind == columnComparison {
+		return renderColumn(p.node.left) + " " + p.node.op + " " + renderColumn(p.node.rightColumn), nil
+	}
+	placeholder := *nextArg
+	*nextArg++
+	return fmt.Sprintf("%s %s $%d", renderColumn(p.node.left), p.node.op, placeholder), []any{p.node.value}
 }
 
-func renderPredicate[S any](p Predicate[S], arg int) (string, any) {
-	return fmt.Sprintf("%s %s $%d", renderColumn(p.node.column), p.node.op, arg), p.node.value
+func predicateColumns(predicate Predicate) []columnRef {
+	if predicate.node.kind == columnComparison {
+		return []columnRef{predicate.node.left, predicate.node.rightColumn}
+	}
+	return []columnRef{predicate.node.left}
 }

@@ -1,121 +1,310 @@
 package tiqq
 
 import (
+	"fmt"
 	"strings"
 )
 
+// TableRef identifies one table occurrence in a query.
+type TableRef struct {
+	name  string
+	alias string
+}
+
+func NewTableRef(name string) TableRef { return TableRef{name: name} }
+
+func (table TableRef) As(alias string) TableRef {
+	if alias == "" {
+		panic("tiqq: table alias must not be empty")
+	}
+	table.alias = alias
+	return table
+}
+
+func (table TableRef) qualifier() string {
+	if table.alias != "" {
+		return table.alias
+	}
+	return table.name
+}
+
+// ForeignKey is the generated metadata used for omitted ON clauses.
+type ForeignKey struct {
+	Columns           []string
+	ReferencedTable   string
+	ReferencedColumns []string
+}
+
+// TableInfo connects a generated concrete column view to query metadata.
+type TableInfo[C, NC any] struct {
+	ref         TableRef
+	required    C
+	nullable    NC
+	foreignKeys []ForeignKey
+}
+
+func NewTableInfo[C, NC any](ref TableRef, required C, nullable NC, foreignKeys []ForeignKey) TableInfo[C, NC] {
+	return TableInfo[C, NC]{
+		ref: ref, required: required, nullable: nullable,
+		foreignKeys: append([]ForeignKey(nil), foreignKeys...),
+	}
+}
+
+// TableLike is implemented by every generated table definition.
+type TableLike[C, NC any] interface {
+	TiqqTableInfo() TableInfo[C, NC]
+}
+
+type tableSource struct {
+	ref         TableRef
+	foreignKeys []ForeignKey
+}
+
 type source struct {
-	baseTable string
-	baseAlias string
-	joins     []joinClause
+	tables []tableSource
+	joins  []joinClause
 }
 
 type joinClause struct {
-	kind, table, alias string
-	on                 JoinCondition
+	kind       string
+	right      tableSource
+	conditions []Predicate
 }
 
-// NewAliasedLeftJoinSource constructs a self-join-capable source. Intended for
-// generated alias table types.
-func NewAliasedLeftJoinSource(leftTable, leftAlias, rightTable, rightAlias string, on JoinCondition) Source {
-	return Source{source{
-		baseTable: leftTable,
-		baseAlias: leftAlias,
-		joins: []joinClause{{
-			kind: "LEFT JOIN", table: rightTable, alias: rightAlias, on: on,
-		}},
-	}}
+// Joined is a binary typed JOIN tree.
+type Joined[L, R any] struct {
+	left   L
+	right  R
+	source source
 }
 
-// NewAliasedInnerJoinSource constructs an aliased INNER JOIN source.
-func NewAliasedInnerJoinSource(leftTable, leftAlias, rightTable, rightAlias string, on JoinCondition) Source {
-	return Source{source{
-		baseTable: leftTable,
-		baseAlias: leftAlias,
-		joins: []joinClause{{
-			kind: "INNER JOIN", table: rightTable, alias: rightAlias, on: on,
-		}},
-	}}
+func (joined Joined[L, R]) Left() L  { return joined.left }
+func (joined Joined[L, R]) Right() R { return joined.right }
+
+// On replaces the inferred condition of the most recently added JOIN.
+func (joined Joined[L, R]) On(conditions ...Predicate) Joined[L, R] {
+	if len(joined.source.joins) == 0 {
+		panic("tiqq: ON requires a JOIN")
+	}
+	index := len(joined.source.joins) - 1
+	joined.source.joins = append([]joinClause(nil), joined.source.joins...)
+	joined.source.joins[index].conditions = append([]Predicate(nil), conditions...)
+	return joined
 }
 
-// NewLeftJoinSource is intended for generated join types.
-func NewLeftJoinSource(left, right string, on JoinCondition) Source {
-	return Source{source{baseTable: left, joins: []joinClause{{kind: "LEFT JOIN", table: right, on: on}}}}
+func LeftJoin[LC, LNC, RC, RNC any, LT TableLike[LC, LNC], RT TableLike[RC, RNC]](
+	left LT,
+	right RT,
+) Joined[LC, RNC] {
+	leftInfo, rightInfo := left.TiqqTableInfo(), right.TiqqTableInfo()
+	return Joined[LC, RNC]{
+		left: leftInfo.required, right: rightInfo.nullable,
+		source: source{
+			tables: []tableSource{tableSourceOf(leftInfo), tableSourceOf(rightInfo)},
+			joins:  []joinClause{{kind: "LEFT JOIN", right: tableSourceOf(rightInfo)}},
+		},
+	}
 }
 
-// NewInnerJoinSource is intended for generated join types.
-func NewInnerJoinSource(left, right string, on JoinCondition) Source {
-	return Source{source{baseTable: left, joins: []joinClause{{kind: "INNER JOIN", table: right, on: on}}}}
+func InnerJoin[LC, LNC, RC, RNC any, LT TableLike[LC, LNC], RT TableLike[RC, RNC]](
+	left LT,
+	right RT,
+) Joined[LC, RC] {
+	leftInfo, rightInfo := left.TiqqTableInfo(), right.TiqqTableInfo()
+	return Joined[LC, RC]{
+		left: leftInfo.required, right: rightInfo.required,
+		source: source{
+			tables: []tableSource{tableSourceOf(leftInfo), tableSourceOf(rightInfo)},
+			joins:  []joinClause{{kind: "INNER JOIN", right: tableSourceOf(rightInfo)}},
+		},
+	}
 }
 
-// Source is an immutable FROM/JOIN tree used by generated query types.
-type Source struct{ value source }
+func tableSourceOf[C, NC any](info TableInfo[C, NC]) tableSource {
+	return tableSource{ref: info.ref, foreignKeys: append([]ForeignKey(nil), info.foreignKeys...)}
+}
 
-func NewQuery[S any](from Source) Query[S] { return Query[S]{from: from.value} }
+func (joined Joined[L, R]) Where(predicates ...Predicate) Query {
+	return NewQuery(joined.source).Where(predicates...)
+}
+
+func (joined Joined[L, R]) Select(columns ...Selection) Query {
+	return NewQuery(joined.source).Select(columns...)
+}
+
+func NewTableQuery[C, NC any](table TableLike[C, NC]) Query {
+	info := table.TiqqTableInfo()
+	return NewQuery(source{tables: []tableSource{tableSourceOf(info)}})
+}
+
+func NewQuery(from source) Query { return Query{from: from} }
 
 // Query builds a SELECT while retaining typed projection metadata.
-type Query[S any] struct {
+type Query struct {
 	from        source
-	predicates  []Predicate[S]
+	predicates  []Predicate
 	projections []columnRef
 }
 
-func (q Query[S]) Where(predicates ...Predicate[S]) Query[S] {
-	q.predicates = appendCopy(q.predicates, predicates...)
-	return q
+func (query Query) Where(predicates ...Predicate) Query {
+	query.predicates = appendCopy(query.predicates, predicates...)
+	return query
 }
 
-func (q Query[S]) Select(columns ...Selection[S]) Query[S] {
-	q.projections = make([]columnRef, len(columns))
-	for i, column := range columns {
-		q.projections[i] = column.selection()
+func (query Query) Select(columns ...Selection) Query {
+	query.projections = make([]columnRef, len(columns))
+	for index, column := range columns {
+		query.projections[index] = column.selection()
 	}
-	return q
+	return query
 }
 
-func (q Query[S]) Build() Statement {
-	if len(q.projections) == 0 {
+func (query Query) Build() Statement {
+	if len(query.projections) == 0 {
 		panic("tiqq: SELECT requires at least one column")
 	}
-	var b strings.Builder
-	b.WriteString("SELECT ")
-	for i, c := range q.projections {
-		if i > 0 {
-			b.WriteString(", ")
+	validateDistinctTableReferences(query.from.tables)
+	allowed := queryAllowedColumns(query.from)
+	validateColumns("SELECT", query.projections, allowed)
+	for _, predicate := range query.predicates {
+		validateColumns("WHERE", predicateColumns(predicate), allowed)
+	}
+
+	var builder strings.Builder
+	builder.WriteString("SELECT ")
+	for index, column := range query.projections {
+		if index > 0 {
+			builder.WriteString(", ")
 		}
-		b.WriteString(renderColumn(c))
+		builder.WriteString(renderColumn(column))
 	}
-	b.WriteString(" FROM ")
-	b.WriteString(quoteIdent(q.from.baseTable))
-	if q.from.baseAlias != "" {
-		b.WriteString(" AS ")
-		b.WriteString(quoteIdent(q.from.baseAlias))
-	}
-	for _, join := range q.from.joins {
-		b.WriteByte(' ')
-		b.WriteString(join.kind)
-		b.WriteByte(' ')
-		b.WriteString(quoteIdent(join.table))
-		if join.alias != "" {
-			b.WriteString(" AS ")
-			b.WriteString(quoteIdent(join.alias))
+	base := query.from.tables[0]
+	builder.WriteString(" FROM ")
+	renderTable(&builder, base.ref)
+
+	args := make([]any, 0, len(query.predicates))
+	nextArg := 1
+	visible := map[string]bool{base.ref.qualifier(): true}
+	for _, join := range query.from.joins {
+		builder.WriteByte(' ')
+		builder.WriteString(join.kind)
+		builder.WriteByte(' ')
+		renderTable(&builder, join.right.ref)
+		conditions := join.conditions
+		if len(conditions) == 0 {
+			conditions = inferJoinConditions(query.from.tables, visible, join.right)
 		}
-		b.WriteString(" ON ")
-		b.WriteString(renderJoin(join.on))
-	}
-	args := make([]any, 0, len(q.predicates))
-	if len(q.predicates) > 0 {
-		b.WriteString(" WHERE ")
-		for i, predicate := range q.predicates {
-			if i > 0 {
-				b.WriteString(" AND ")
+		joinAllowed := copySet(visible)
+		joinAllowed[join.right.ref.qualifier()] = true
+		builder.WriteString(" ON ")
+		for index, condition := range conditions {
+			validateColumns("ON", predicateColumns(condition), joinAllowed)
+			if index > 0 {
+				builder.WriteString(" AND ")
 			}
-			sql, arg := renderPredicate(predicate, i+1)
-			b.WriteString(sql)
-			args = append(args, arg)
+			text, values := renderPredicate(condition, &nextArg)
+			builder.WriteString(text)
+			args = append(args, values...)
+		}
+		visible[join.right.ref.qualifier()] = true
+	}
+	if len(query.predicates) > 0 {
+		builder.WriteString(" WHERE ")
+		for index, predicate := range query.predicates {
+			if index > 0 {
+				builder.WriteString(" AND ")
+			}
+			text, values := renderPredicate(predicate, &nextArg)
+			builder.WriteString(text)
+			args = append(args, values...)
 		}
 	}
-	return newStatement(b.String(), args, q.projections)
+	return newStatement(builder.String(), args, query.projections)
+}
+
+func validateDistinctTableReferences(tables []tableSource) {
+	seen := make(map[string]bool, len(tables))
+	for _, table := range tables {
+		qualifier := table.ref.qualifier()
+		if seen[qualifier] {
+			panic("tiqq: table aliases must be distinct")
+		}
+		seen[qualifier] = true
+	}
+}
+
+func renderTable(builder *strings.Builder, table TableRef) {
+	builder.WriteString(quoteIdent(table.name))
+	if table.alias != "" {
+		builder.WriteString(" AS ")
+		builder.WriteString(quoteIdent(table.alias))
+	}
+}
+
+func queryAllowedColumns(from source) map[string]bool {
+	allowed := make(map[string]bool, len(from.tables))
+	for _, table := range from.tables {
+		allowed[table.ref.qualifier()] = true
+	}
+	return allowed
+}
+
+func validateColumns(clause string, columns []columnRef, allowed map[string]bool) {
+	for _, column := range columns {
+		if !allowed[column.qualifier] {
+			panic(fmt.Sprintf("tiqq: %s column %s is not in query scope", clause, column.id))
+		}
+	}
+}
+
+func inferJoinConditions(tables []tableSource, visible map[string]bool, right tableSource) []Predicate {
+	var candidates [][]Predicate
+	for _, table := range tables {
+		if !visible[table.ref.qualifier()] {
+			continue
+		}
+		candidates = append(candidates, relationPredicateGroups(table, right)...)
+		candidates = append(candidates, relationPredicateGroups(right, table)...)
+	}
+	if len(candidates) == 0 {
+		panic("tiqq: JOIN requires ON because no foreign key matches")
+	}
+	if len(candidates) > 1 {
+		panic("tiqq: JOIN requires ON because multiple foreign keys match")
+	}
+	return candidates[0]
+}
+
+func relationPredicateGroups(child, parent tableSource) [][]Predicate {
+	var result [][]Predicate
+	for _, foreignKey := range child.foreignKeys {
+		if foreignKey.ReferencedTable != parent.ref.name || len(foreignKey.Columns) == 0 || len(foreignKey.Columns) != len(foreignKey.ReferencedColumns) {
+			continue
+		}
+		conditions := make([]Predicate, len(foreignKey.Columns))
+		for index, column := range foreignKey.Columns {
+			conditions[index] = Predicate{node: predicateNode{
+				kind: columnComparison,
+				left: columnRef{
+					id: child.ref.qualifier() + "." + column, qualifier: child.ref.qualifier(), name: column,
+				},
+				op: "=",
+				rightColumn: columnRef{
+					id: parent.ref.qualifier() + "." + foreignKey.ReferencedColumns[index], qualifier: parent.ref.qualifier(), name: foreignKey.ReferencedColumns[index],
+				},
+			}}
+		}
+		result = append(result, conditions)
+	}
+	return result
+}
+
+func copySet(values map[string]bool) map[string]bool {
+	result := make(map[string]bool, len(values)+1)
+	for key, value := range values {
+		result[key] = value
+	}
+	return result
 }
 
 func appendCopy[T any](base []T, values ...T) []T {

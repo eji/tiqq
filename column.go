@@ -22,6 +22,7 @@ type Assignment[S any] struct {
 	column   columnRef
 	value    any
 	excluded bool
+	inserted bool
 }
 
 func (assignment Assignment[S]) updateValue(S) Assignment[S] { return assignment }

@@ -49,8 +49,8 @@ func (query UpdateQuery[S]) Build() (Statement, error) {
 	allowed := map[string]bool{query.table.ref.qualifier(): true}
 	columns := make([]columnRef, len(query.assignments))
 	for index, assignment := range query.assignments {
-		if assignment.excluded {
-			return Statement{}, fmt.Errorf("tiqq: UPDATE SET does not accept EXCLUDED assignments")
+		if assignment.excluded || assignment.inserted {
+			return Statement{}, fmt.Errorf("tiqq: UPDATE SET does not accept incoming-row assignments")
 		}
 		columns[index] = assignment.column
 	}

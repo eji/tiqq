@@ -121,6 +121,18 @@ q := UserTable.Insert().
 stmt, err := q.Build()
 ```
 
+MySQL-generated insert builders expose `ON DUPLICATE KEY UPDATE`. `Inserted`
+refers to the row proposed for insertion using MySQL's row-alias syntax:
+
+```go
+q := UserTable.Insert().
+	Values(UserTable.ID.Value(1), UserTable.Name.Value("Alice")).
+	OnDuplicateKey().
+	DoUpdate(mysql.Inserted(UserTable.Name))
+
+stmt, err := q.Build()
+```
+
 After an adapter scans values in projection order, result access preserves the
 column's generated type:
 

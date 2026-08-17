@@ -6,7 +6,15 @@ import (
 	"testing"
 
 	"github.com/eji/tiqq"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	_ tiqq.Scanner = (*sql.Row)(nil)
+	_ tiqq.Scanner = (*sql.Rows)(nil)
+	_ tiqq.Scanner = (pgx.Row)(nil)
+	_ tiqq.Scanner = (pgx.Rows)(nil)
 )
 
 type scannerFunc func(destinations ...any) error

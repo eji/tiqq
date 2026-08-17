@@ -169,18 +169,32 @@ q := UserTable.Insert().
 stmt, err := q.Build()
 ```
 
-After an adapter scans values in projection order, result access preserves the
-column's generated type:
+Execute with `database/sql` and pass its row together with the built statement
+to `ScanRow`:
 
 ```go
-row, err := tiqq.NewRow(stmt, id, name, nullableAddress)
-id, err      := row.Get(j.Left().ID)       // int64
-name, err    := row.Get(j.Left().Name)     // string
-address, err := row.Get(j.Right().Address) // sql.Null[string]
+sqlRow := db.QueryRowContext(ctx, stmt.SQL(), stmt.Args()...)
+row, err := tiqq.ScanRow(sqlRow, stmt)
+if err != nil {
+	return err
+}
+
+id, err := row.Get(UserTable.ID)
+name, err := row.Get(UserTable.Name)
 ```
 
-`Get` reports missing projections and driver conversion failures as errors.
-`MustGet` is available for queries whose projection is statically fixed.
+The same boundary works with native pgx without an adapter package:
+
+```go
+pgxRow := pool.QueryRow(ctx, stmt.SQL(), stmt.Args()...)
+row, err := tiqq.ScanRow(pgxRow, stmt)
+```
+
+For multiple rows, call `ScanRow(rows, stmt)` inside the driver's normal
+`rows.Next()` loop. Execution, connection management, transactions, and row
+iteration remain owned by `database/sql` or pgx. `Get` reports missing
+projections and driver conversion failures as errors; `MustGet` is available
+for statically fixed projections.
 
 Numeric aggregate result types follow PostgreSQL's type rules and aggregate
 results other than `COUNT` remain nullable:
@@ -227,7 +241,7 @@ aliases are rejected by `Build`.
 
 This prototype intentionally requires Go 1.27 generic methods. At the time of
 writing, Go 1.27 is not yet generally released, so use a Go 1.27 prerelease
-toolchain. Execution remains owned by `database/sql`, pgx, or another adapter.
+toolchain. Execution remains owned by `database/sql` or pgx.
 
 To generate typed Go directly from the live PostgreSQL schema, keep the DSN in
 an environment variable and use the `postgres` subcommand:

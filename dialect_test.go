@@ -98,3 +98,57 @@ func TestQueryRendererRejectsMixedDialects(t *testing.T) {
 
 	require.EqualError(t, err, "tiqq: cannot combine postgresql and other SQL dialects")
 }
+
+func TestSelectModifiersUseDialectPlaceholders(t *testing.T) {
+	tests := map[string]struct {
+		dialect Dialect
+		want    string
+	}{
+		"mysql": {
+			dialect: MySQL,
+			want:    "SELECT DISTINCT `users`.`id` FROM `users` ORDER BY `users`.`id` DESC LIMIT ? OFFSET ?",
+		},
+		"sqlite": {
+			dialect: SQLite,
+			want:    `SELECT DISTINCT "users"."id" FROM "users" ORDER BY "users"."id" DESC LIMIT ? OFFSET ?`,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			table := NewSchemaInfo(test.dialect).Table("users")
+			id := RequiredNumericColumn[mysqlScope, int64, Decimal, Decimal]("users", "id")
+			statement := NewQuery(source{tables: []tableSource{{ref: table}}}).
+				Select(id).Distinct().OrderBy(id.Desc()).Limit(10).Offset(5).MustBuild()
+
+			require.Equal(t, test.want, statement.SQL())
+			require.Equal(t, []any{int64(10), int64(5)}, statement.Args())
+		})
+	}
+}
+
+func TestOffsetWithoutLimitValidation(t *testing.T) {
+	tests := map[string]struct {
+		dialect Dialect
+		want    string
+	}{
+		"mysql": {
+			dialect: MySQL,
+			want:    "tiqq: mysql OFFSET requires LIMIT",
+		},
+		"sqlite": {
+			dialect: SQLite,
+			want:    "tiqq: sqlite OFFSET requires LIMIT",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			table := NewSchemaInfo(test.dialect).Table("users")
+			id := RequiredNumericColumn[mysqlScope, int64, Decimal, Decimal]("users", "id")
+			_, err := NewQuery(source{tables: []tableSource{{ref: table}}}).Select(id).Offset(5).Build()
+
+			require.EqualError(t, err, test.want)
+		})
+	}
+}

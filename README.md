@@ -55,6 +55,16 @@ if err != nil {
 rows, err := db.QueryContext(ctx, stmt.SQL(), stmt.Args()...)
 ```
 
+Common result modifiers remain close to SQL and retain typed ordering keys:
+
+```go
+q := UserTable.Select(UserTable.ID, UserTable.Name).
+	Distinct().
+	OrderBy(UserTable.Name.Asc(), UserTable.ID.Desc()).
+	Limit(20).
+	Offset(40)
+```
+
 Generated tables retain the SQL dialect of their introspected schema. `Build`
 uses that metadata for identifier quoting, placeholders, and feature validation;
 callers do not pass a dialect or override the schema's source database.

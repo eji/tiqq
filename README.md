@@ -86,3 +86,28 @@ go run ./cmd/tiqq-gen \
 
 Multiple relations from the same parent require an explicit relation API and
 are currently rejected instead of producing ambiguous Go methods.
+
+To introspect PostgreSQL and generate Go directly, keep the DSN in an
+environment variable and use the `postgres` subcommand:
+
+```sh
+export DATABASE_URL='postgres://user:password@localhost:5432/app'
+
+go run ./cmd/tiqq-gen postgres \
+  -dsn-env DATABASE_URL \
+  -schema public \
+  -package dbschema \
+  -output internal/dbschema/schema_gen.go
+```
+
+The command verifies the connection, reads the live PostgreSQL catalog,
+generates formatted Go, and atomically replaces the output file. A failed
+connection, introspection, or generation leaves an existing output untouched.
+Use `-output -` to write generated code to stdout.
+
+It can also be used with `go generate` without putting credentials in source or
+process arguments:
+
+```go
+//go:generate go run github.com/eji/tiqq/cmd/tiqq-gen postgres -dsn-env DATABASE_URL -schema public -package dbschema -output schema_gen.go
+```

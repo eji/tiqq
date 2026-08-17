@@ -152,3 +152,35 @@ func TestOffsetWithoutLimitValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteDialectRendering(t *testing.T) {
+	tests := map[string]struct {
+		dialect Dialect
+		want    string
+	}{
+		"postgres": {
+			dialect: PostgreSQL,
+			want:    `DELETE FROM "users" WHERE "users"."id" = $1`,
+		},
+		"mysql": {
+			dialect: MySQL,
+			want:    "DELETE FROM `users` WHERE `users`.`id` = ?",
+		},
+		"sqlite": {
+			dialect: SQLite,
+			want:    `DELETE FROM "users" WHERE "users"."id" = ?`,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			table := NewSchemaInfo(test.dialect).Table("users")
+			id := RequiredNumericColumn[mysqlScope, int64, Decimal, Decimal]("users", "id")
+			statement := DeleteQuery[mysqlScope]{table: tableSource{ref: table}}.
+				Where(id.Eq(int64(7))).MustBuild()
+
+			require.Equal(t, test.want, statement.SQL())
+			require.Equal(t, []any{int64(7)}, statement.Args())
+		})
+	}
+}

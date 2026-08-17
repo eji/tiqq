@@ -65,6 +65,9 @@ func (table AddressTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
 func (table AddressTableDef) Update() tiqq.UpdateQuery[AddressScope] {
 	return tiqq.NewUpdate[AddressScope](table)
 }
+func (table AddressTableDef) Delete() tiqq.DeleteQuery[AddressScope] {
+	return tiqq.NewDelete[AddressScope](table)
+}
 func (table AddressTableDef) Insert() postgres.InsertQuery[AddressScope] {
 	return postgres.NewInsert(tiqq.NewInsert[AddressScope, tiqq.PostgreSQLMarker](table.ref, []string{"id", "user_id", "company_id", "address"}, []string{"id", "user_id", "company_id", "address"}, [][]string{{"id"}}))
 }
@@ -132,6 +135,9 @@ func (table AuditLogTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
 func (table AuditLogTableDef) Update() tiqq.UpdateQuery[AuditLogScope] {
 	return tiqq.NewUpdate[AuditLogScope](table)
 }
+func (table AuditLogTableDef) Delete() tiqq.DeleteQuery[AuditLogScope] {
+	return tiqq.NewDelete[AuditLogScope](table)
+}
 func (table AuditLogTableDef) Insert() postgres.InsertQuery[AuditLogScope] {
 	return postgres.NewInsert(tiqq.NewInsert[AuditLogScope, tiqq.PostgreSQLMarker](table.ref, []string{"id", "actor_id", "active", "message"}, []string{"id", "actor_id", "active", "message"}, [][]string{{"id"}}))
 }
@@ -190,6 +196,9 @@ func (table CompanyTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
 }
 func (table CompanyTableDef) Update() tiqq.UpdateQuery[CompanyScope] {
 	return tiqq.NewUpdate[CompanyScope](table)
+}
+func (table CompanyTableDef) Delete() tiqq.DeleteQuery[CompanyScope] {
+	return tiqq.NewDelete[CompanyScope](table)
 }
 func (table CompanyTableDef) Insert() postgres.InsertQuery[CompanyScope] {
 	return postgres.NewInsert(tiqq.NewInsert[CompanyScope, tiqq.PostgreSQLMarker](table.ref, []string{"id", "name"}, []string{"id", "name"}, [][]string{{"id"}}))
@@ -251,6 +260,9 @@ func (table UserTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query {
 }
 func (table UserTableDef) Update() tiqq.UpdateQuery[UserScope] {
 	return tiqq.NewUpdate[UserScope](table)
+}
+func (table UserTableDef) Delete() tiqq.DeleteQuery[UserScope] {
+	return tiqq.NewDelete[UserScope](table)
 }
 func (table UserTableDef) Insert() postgres.InsertQuery[UserScope] {
 	return postgres.NewInsert(tiqq.NewInsert[UserScope, tiqq.PostgreSQLMarker](table.ref, []string{"id", "name", "manager_id"}, []string{"id", "name"}, [][]string{{"id"}}))

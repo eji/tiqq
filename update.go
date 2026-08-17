@@ -58,7 +58,11 @@ func (query UpdateQuery[S]) Build() (Statement, error) {
 		return Statement{}, err
 	}
 	for _, predicate := range query.predicates {
-		if err := validateColumns("WHERE", predicateColumns(predicate), allowed); err != nil {
+		columns := predicateColumns(predicate)
+		if err := validateColumns("WHERE", columns, allowed); err != nil {
+			return Statement{}, err
+		}
+		if err := validateNoAggregates("WHERE", columns); err != nil {
 			return Statement{}, err
 		}
 	}

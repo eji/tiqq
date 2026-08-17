@@ -87,6 +87,14 @@ func TestUpdateBuildValidation(t *testing.T) {
 			},
 			want: "tiqq: WHERE column addresses.id is not in query scope",
 		},
+		"where rejects aggregate": {
+			build: func() error {
+				_, err := UserTable.Update().Set(UserTable.Name.To("Alice")).
+					Where(UserTable.ID.Count().Gt(int64(1))).Build()
+				return err
+			},
+			want: "tiqq: WHERE does not accept aggregate COUNT(users.id)",
+		},
 	}
 
 	for name, test := range tests {

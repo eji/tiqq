@@ -129,6 +129,7 @@ func writeTable(output *bytes.Buffer, table schema.Table, dialect schema.Dialect
 	fmt.Fprintf(output, "func (table %sTableDef) Select(columns ...tiqq.Selection) tiqq.Query { return tiqq.NewTableQuery(table).Select(columns...) }\n", typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) GroupBy(columns ...tiqq.Selection) tiqq.Query { return tiqq.NewTableQuery(table).GroupBy(columns...) }\n", typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) Update() tiqq.UpdateQuery[%s] { return tiqq.NewUpdate[%s](table) }\n", typeName, scope, scope)
+	fmt.Fprintf(output, "func (table %sTableDef) Delete() tiqq.DeleteQuery[%s] { return tiqq.NewDelete[%s](table) }\n", typeName, scope, scope)
 	dialectPackage, marker := "postgres", "PostgreSQLMarker"
 	if dialect == schema.MySQL {
 		dialectPackage, marker = "mysql", "MySQLMarker"

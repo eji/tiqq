@@ -58,6 +58,18 @@ rows, err := db.QueryContext(ctx, stmt.SQL(), stmt.Args()...)
 For a statically defined query that should fail fast during development, use
 `q.MustBuild()`; it panics with the same validation error.
 
+Updates support type-safe, dynamic `SET` construction. A `WHERE` clause is
+required unless `AllRows()` is explicitly selected:
+
+```go
+q := UserTable.Update()
+if input.Name != nil {
+	q = q.Set(UserTable.Name.To(*input.Name))
+}
+q = q.Where(UserTable.ID.Eq(input.ID))
+stmt, err := q.Build()
+```
+
 After an adapter scans values in projection order, result access preserves the
 column's generated type:
 

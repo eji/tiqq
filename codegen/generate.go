@@ -97,6 +97,7 @@ func writeTable(output *bytes.Buffer, table schema.Table) {
 	fmt.Fprintf(output, "func (table %sTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]](right R) tiqq.Joined[%sTableDef, C] { return tiqq.InnerJoin(table, right) }\n", typeName, typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query { return tiqq.NewTableQuery(table).Where(predicates...) }\n", typeName)
 	fmt.Fprintf(output, "func (table %sTableDef) Select(columns ...tiqq.Selection) tiqq.Query { return tiqq.NewTableQuery(table).Select(columns...) }\n", typeName)
+	fmt.Fprintf(output, "func (table %sTableDef) Update() tiqq.UpdateQuery[%s] { return tiqq.NewUpdate[%s](table) }\n", typeName, scope, scope)
 	fmt.Fprintf(output, "func (table %sTableDef) As(alias string) %sTableDef {\n", typeName, typeName)
 	output.WriteString("table.ref = table.ref.As(alias)\n")
 	for _, column := range table.Columns {

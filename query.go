@@ -6,12 +6,36 @@ import (
 
 type source struct {
 	baseTable string
+	baseAlias string
 	joins     []joinClause
 }
 
 type joinClause struct {
-	kind, table string
-	on          JoinCondition
+	kind, table, alias string
+	on                 JoinCondition
+}
+
+// NewAliasedLeftJoinSource constructs a self-join-capable source. Intended for
+// generated alias table types.
+func NewAliasedLeftJoinSource(leftTable, leftAlias, rightTable, rightAlias string, on JoinCondition) Source {
+	return Source{source{
+		baseTable: leftTable,
+		baseAlias: leftAlias,
+		joins: []joinClause{{
+			kind: "LEFT JOIN", table: rightTable, alias: rightAlias, on: on,
+		}},
+	}}
+}
+
+// NewAliasedInnerJoinSource constructs an aliased INNER JOIN source.
+func NewAliasedInnerJoinSource(leftTable, leftAlias, rightTable, rightAlias string, on JoinCondition) Source {
+	return Source{source{
+		baseTable: leftTable,
+		baseAlias: leftAlias,
+		joins: []joinClause{{
+			kind: "INNER JOIN", table: rightTable, alias: rightAlias, on: on,
+		}},
+	}}
 }
 
 // NewLeftJoinSource is intended for generated join types.
@@ -63,11 +87,19 @@ func (q Query[S]) Build() Statement {
 	}
 	b.WriteString(" FROM ")
 	b.WriteString(quoteIdent(q.from.baseTable))
+	if q.from.baseAlias != "" {
+		b.WriteString(" AS ")
+		b.WriteString(quoteIdent(q.from.baseAlias))
+	}
 	for _, join := range q.from.joins {
 		b.WriteByte(' ')
 		b.WriteString(join.kind)
 		b.WriteByte(' ')
 		b.WriteString(quoteIdent(join.table))
+		if join.alias != "" {
+			b.WriteString(" AS ")
+			b.WriteString(quoteIdent(join.alias))
+		}
 		b.WriteString(" ON ")
 		b.WriteString(renderJoin(join.on))
 	}

@@ -72,6 +72,58 @@ func TestInnerJoin(t *testing.T) {
 	require.Equal(t, "Tokyo", row.Get(j.Right().Address))
 }
 
+func TestSelfJoinWithAliases(t *testing.T) {
+	employee := UserTable.As("employee")
+	manager := UserTable.As("manager")
+	j := employee.LeftJoin(
+		manager,
+		tiqq.On(employee.ManagerID, manager.ID),
+	)
+	stmt := j.
+		Where(j.Left().Name.Like("A%")).
+		Select(j.Left().ID, j.Left().Name, j.Right().Name).
+		Build()
+	wantManager := sql.Null[string]{V: "Bob", Valid: true}
+	row, err := tiqq.NewRow(stmt, int64(1), "Alice", wantManager)
+
+	require.Equal(
+		t,
+		`SELECT "employee"."id", "employee"."name", "manager"."name" FROM "users" AS "employee" LEFT JOIN "users" AS "manager" ON "employee"."manager_id" = "manager"."id" WHERE "employee"."name" LIKE $1`,
+		stmt.SQL(),
+	)
+	require.Equal(t, []any{"A%"}, stmt.Args())
+	require.NoError(t, err)
+	require.Equal(t, int64(1), row.Get(j.Left().ID))
+	require.Equal(t, "Alice", row.Get(j.Left().Name))
+	require.Equal(t, wantManager, row.Get(j.Right().Name))
+}
+
+func TestSelfJoinAliasValidation(t *testing.T) {
+	tests := map[string]struct {
+		run       func()
+		wantPanic string
+	}{
+		"empty alias": {
+			run:       func() { UserTable.As("") },
+			wantPanic: "tiqq: table alias must not be empty",
+		},
+		"duplicate alias": {
+			run: func() {
+				left := UserTable.As("user")
+				right := UserTable.As("user")
+				left.LeftJoin(right, tiqq.On(left.ManagerID, right.ID))
+			},
+			wantPanic: "tiqq: self join aliases must be distinct",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.PanicsWithValue(t, test.wantPanic, test.run)
+		})
+	}
+}
+
 func TestPredicateOperators(t *testing.T) {
 	j := prototypeJoin()
 	tests := map[string]struct {

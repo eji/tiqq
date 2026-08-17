@@ -81,3 +81,29 @@ func TestGenerateValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateSelfJoinAliases(t *testing.T) {
+	database := schema.Schema{Tables: []schema.Table{{
+		Name: "users",
+		Columns: []schema.Column{
+			{Name: "id", DBType: "int8"},
+			{Name: "name", DBType: "text"},
+			{Name: "manager_id", DBType: "int8", Nullable: true},
+		},
+		ForeignKeys: []schema.ForeignKey{{
+			Name: "users_manager_id_fkey", Columns: []string{"manager_id"},
+			ReferencedTable: "users", ReferencedColumns: []string{"id"},
+		}},
+	}}}
+
+	generated, err := codegen.Generate(database, codegen.Config{Package: "dbschema"})
+	source := string(generated)
+
+	require.NoError(t, err)
+	require.Contains(t, source, "type UserAliasTableDef struct")
+	require.Contains(t, source, "func (table UserTableDef) As(alias string) UserAliasTableDef")
+	require.Contains(t, source, "func (left UserAliasTableDef) LeftJoin(right UserAliasTableDef")
+	require.Contains(t, source, "func (left UserAliasTableDef) InnerJoin(right UserAliasTableDef")
+	require.Contains(t, source, `tiqq.NewAliasedLeftJoinSource("users", left.alias, "users", right.alias, on)`)
+	require.NotContains(t, source, "func (table UserTableDef) LeftJoin(right UserTableDef")
+}

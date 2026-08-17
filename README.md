@@ -137,6 +137,18 @@ q := UserTable.Insert().
 stmt, err := q.Build()
 ```
 
+SQLite-generated builders expose SQLite's `ON CONFLICT`, including its
+optional conflict target for the final update clause:
+
+```go
+q := UserTable.Insert().
+	Values(UserTable.Email.Value("alice@example.com"), UserTable.Name.Value("Alice")).
+	OnConflict(UserTable.Email).
+	DoUpdate(sqlite.Excluded(UserTable.Name))
+
+stmt, err := q.Build()
+```
+
 After an adapter scans values in projection order, result access preserves the
 column's generated type:
 

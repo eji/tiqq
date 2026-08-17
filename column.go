@@ -14,6 +14,12 @@ type columnRef struct {
 	name      string
 }
 
+// Assignment is a type-safe UPDATE assignment for scope S.
+type Assignment[S any] struct {
+	column columnRef
+	value  any
+}
+
 // AliasColumn rebinds a column to an explicitly named table instance. The
 // alias becomes part of both its SQL qualifier and projection identity.
 func AliasColumn[From, To, V, C any](column Column[From, V, C], alias string) Column[To, V, C] {
@@ -83,6 +89,11 @@ func (c Column[S, V, C]) IsNull() Predicate {
 
 func (c Column[S, V, C]) IsNotNull() Predicate {
 	return Predicate{node: predicateNode{kind: nullComparison, left: c.ref, op: "IS NOT NULL"}}
+}
+
+// To assigns a value to this column in an UPDATE statement.
+func (c Column[S, V, C]) To(value C) Assignment[S] {
+	return Assignment[S]{column: c.ref, value: value}
 }
 
 func listPredicate[C any](column columnRef, operator string, values []C) Predicate {

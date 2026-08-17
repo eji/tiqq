@@ -56,6 +56,9 @@ func (table AddressTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 func (table AddressTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 	return tiqq.NewTableQuery(table).Select(columns...)
 }
+func (table AddressTableDef) Update() tiqq.UpdateQuery[AddressScope] {
+	return tiqq.NewUpdate[AddressScope](table)
+}
 func (table AddressTableDef) As(alias string) AddressTableDef {
 	table.ref = table.ref.As(alias)
 	table.ID = tiqq.AliasColumn[AddressScope, AddressScope](table.ID, alias)
@@ -114,6 +117,9 @@ func (table AuditLogTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 func (table AuditLogTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 	return tiqq.NewTableQuery(table).Select(columns...)
 }
+func (table AuditLogTableDef) Update() tiqq.UpdateQuery[AuditLogScope] {
+	return tiqq.NewUpdate[AuditLogScope](table)
+}
 func (table AuditLogTableDef) As(alias string) AuditLogTableDef {
 	table.ref = table.ref.As(alias)
 	table.ID = tiqq.AliasColumn[AuditLogScope, AuditLogScope](table.ID, alias)
@@ -163,6 +169,9 @@ func (table CompanyTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 }
 func (table CompanyTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 	return tiqq.NewTableQuery(table).Select(columns...)
+}
+func (table CompanyTableDef) Update() tiqq.UpdateQuery[CompanyScope] {
+	return tiqq.NewUpdate[CompanyScope](table)
 }
 func (table CompanyTableDef) As(alias string) CompanyTableDef {
 	table.ref = table.ref.As(alias)
@@ -215,6 +224,9 @@ func (table UserTableDef) Where(predicates ...tiqq.Predicate) tiqq.Query {
 }
 func (table UserTableDef) Select(columns ...tiqq.Selection) tiqq.Query {
 	return tiqq.NewTableQuery(table).Select(columns...)
+}
+func (table UserTableDef) Update() tiqq.UpdateQuery[UserScope] {
+	return tiqq.NewUpdate[UserScope](table)
 }
 func (table UserTableDef) As(alias string) UserTableDef {
 	table.ref = table.ref.As(alias)

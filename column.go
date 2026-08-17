@@ -12,6 +12,8 @@ type columnRef struct {
 	id        string
 	qualifier string
 	name      string
+	sql       string
+	aggregate bool
 }
 
 // Assignment is a type-safe UPDATE assignment for scope S.
@@ -97,6 +99,18 @@ func (c Column[S, V, C]) IsNotNull() Predicate {
 	return Predicate{node: predicateNode{kind: nullComparison, left: c.ref, op: "IS NOT NULL"}}
 }
 
+func (c Column[S, V, C]) Count() Aggregate[S, int64, int64] {
+	return aggregate[S, int64, int64]("COUNT", c.ref)
+}
+
+func (c Column[S, V, C]) Min() Aggregate[S, sql.Null[C], C] {
+	return aggregate[S, sql.Null[C], C]("MIN", c.ref)
+}
+
+func (c Column[S, V, C]) Max() Aggregate[S, sql.Null[C], C] {
+	return aggregate[S, sql.Null[C], C]("MAX", c.ref)
+}
+
 // To assigns a value to this column in an UPDATE statement.
 func (c Column[S, V, C]) To(value C) Assignment[S] {
 	return Assignment[S]{column: c.ref, value: value}
@@ -120,7 +134,10 @@ func listPredicate[C any](column columnRef, operator string, values []C) Predica
 	}}
 }
 
-func (c Column[S, V, C]) selection() columnRef { return c.ref }
+func (c Column[S, V, C]) selection() columnRef      { return c.ref }
+func (c Column[S, V, C]) resultRef() columnRef      { return c.ref }
+func (c Column[S, V, C]) resultValue(V)             {}
+func (c Column[S, V, C]) comparisonRef(C) columnRef { return c.ref }
 
 // Selection is the closed set of selectable expressions for scope S.
 type Selection interface {

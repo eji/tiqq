@@ -33,35 +33,39 @@ func comparison(column columnRef, op string, value any) Predicate {
 	return Predicate{node: predicateNode{kind: valueComparison, left: column, op: op, value: value}}
 }
 
+type comparisonColumn[T any] interface {
+	comparisonRef(T) columnRef
+}
+
 // Eq compares two columns with the same comparison type.
-func Eq[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+func Eq[T any, L comparisonColumn[T], R comparisonColumn[T]](left L, right R) Predicate {
 	return compareColumns(left, "=", right)
 }
 
 // Ne compares two columns for inequality using the standard SQL <> operator.
-func Ne[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+func Ne[T any, L comparisonColumn[T], R comparisonColumn[T]](left L, right R) Predicate {
 	return compareColumns(left, "<>", right)
 }
 
-func Lt[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+func Lt[T any, L comparisonColumn[T], R comparisonColumn[T]](left L, right R) Predicate {
 	return compareColumns(left, "<", right)
 }
 
-func Lte[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+func Lte[T any, L comparisonColumn[T], R comparisonColumn[T]](left L, right R) Predicate {
 	return compareColumns(left, "<=", right)
 }
 
-func Gt[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+func Gt[T any, L comparisonColumn[T], R comparisonColumn[T]](left L, right R) Predicate {
 	return compareColumns(left, ">", right)
 }
 
-func Gte[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+func Gte[T any, L comparisonColumn[T], R comparisonColumn[T]](left L, right R) Predicate {
 	return compareColumns(left, ">=", right)
 }
 
-func compareColumns[LS, LV, RS, RV, T any](left Column[LS, LV, T], operator string, right Column[RS, RV, T]) Predicate {
+func compareColumns[T any, L comparisonColumn[T], R comparisonColumn[T]](left L, operator string, right R) Predicate {
 	return Predicate{node: predicateNode{
-		kind: columnComparison, left: left.ref, op: operator, rightColumn: right.ref,
+		kind: columnComparison, left: left.comparisonRef(*new(T)), op: operator, rightColumn: right.comparisonRef(*new(T)),
 	}}
 }
 
@@ -92,6 +96,9 @@ func logical(operator string, predicates []Predicate) Predicate {
 func quoteIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
 
 func renderColumn(c columnRef) string {
+	if c.sql != "" {
+		return c.sql
+	}
 	return quoteIdent(c.qualifier) + "." + quoteIdent(c.name)
 }
 

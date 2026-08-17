@@ -38,7 +38,7 @@ func TestGenerate(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, source, "type UserTableDef struct")
 	require.Contains(t, source, "DisplayName tiqq.Column[UserScope, string, string]")
-	require.Contains(t, source, "tiqq.Column[UserScope, tiqq.Decimal, tiqq.Decimal]")
+	require.Contains(t, source, "tiqq.NumericColumn[UserScope, tiqq.Decimal, tiqq.Decimal, tiqq.Decimal, tiqq.Decimal]")
 	require.Contains(t, source, "Address tiqq.Column[AddressScope, sql.Null[string], string]")
 	require.Contains(t, source, "type NullableAddressTableDef struct")
 	require.Contains(t, source, "func (table UserTableDef) TiqqJoinSource() tiqq.JoinSourceInfo[UserTableDef]")
@@ -128,7 +128,7 @@ func TestGenerateSelfJoinAliases(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, source, "func (table UserTableDef) As(alias string) UserTableDef")
 	require.Contains(t, source, "func (table UserTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]]")
-	require.Contains(t, source, "table.ManagerID = tiqq.AliasColumn[UserScope, UserScope](table.ManagerID, alias)")
+	require.Contains(t, source, "table.ManagerID = tiqq.AliasNumericColumn[UserScope, UserScope](table.ManagerID, alias)")
 	require.NotContains(t, source, "UserAliasTableDef")
 }
 
@@ -152,3 +152,42 @@ func TestGenerateInsertMetadata(t *testing.T) {
 }
 
 func stringPointer(value string) *string { return &value }
+
+func TestGeneratePostgresAggregateTypes(t *testing.T) {
+	tests := map[string]struct {
+		databaseType string
+		want         string
+	}{
+		"integer": {
+			databaseType: "int4",
+			want:         "tiqq.NumericColumn[MetricScope, int32, int32, int64, tiqq.Decimal]",
+		},
+		"bigint": {
+			databaseType: "int8",
+			want:         "tiqq.NumericColumn[MetricScope, int64, int64, tiqq.Decimal, tiqq.Decimal]",
+		},
+		"numeric": {
+			databaseType: "numeric",
+			want:         "tiqq.NumericColumn[MetricScope, tiqq.Decimal, tiqq.Decimal, tiqq.Decimal, tiqq.Decimal]",
+		},
+		"real": {
+			databaseType: "float4",
+			want:         "tiqq.NumericColumn[MetricScope, float32, float32, float32, float64]",
+		},
+		"double precision": {
+			databaseType: "float8",
+			want:         "tiqq.NumericColumn[MetricScope, float64, float64, float64, float64]",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			generated, err := codegen.Generate(schema.Schema{Tables: []schema.Table{{
+				Name: "metrics", Columns: []schema.Column{{Name: "metric", DBType: test.databaseType}},
+			}}}, codegen.Config{Package: "dbschema"})
+
+			require.NoError(t, err)
+			require.Contains(t, string(generated), test.want)
+		})
+	}
+}

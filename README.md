@@ -115,8 +115,17 @@ IR in `schema`, which `codegen` then consumes. This intermediate representation
 is an implementation boundary, not a required user-managed artifact.
 
 The generator emits typed tables and unambiguous FK-based inner/left joins.
-Multiple relations from the same parent require an explicit relation API and
-are currently rejected instead of producing ambiguous Go methods.
+When a parent has multiple relations, the generated relation object makes the
+choice explicit while preserving typed join branches:
+
+```go
+j := AddressesUserID.LeftJoin(UserTable, AddressTable)
+```
+
+The relation derives its `ON` condition from the database foreign key. Direct
+`table.LeftJoin(...)` and `table.InnerJoin(...)` methods remain available when
+the relation is unambiguous. Composite foreign keys still require an explicit
+`ON` API and are currently rejected by relation inference.
 
 It can also be used with `go generate` without putting credentials in source or
 process arguments:

@@ -63,14 +63,20 @@ func TestGenerateValidation(t *testing.T) {
 			}}},
 			want: "codegen: foreign key missing_fk references unknown table users",
 		},
-		"join relation must be unambiguous": {
+		"composite ambiguous relation requires explicit ON": {
 			config: codegen.Config{Package: "dbschema"},
 			database: schema.Schema{Tables: []schema.Table{
 				{Name: "users"},
-				{Name: "addresses", ForeignKeys: []schema.ForeignKey{{ReferencedTable: "users"}}},
-				{Name: "profiles", ForeignKeys: []schema.ForeignKey{{ReferencedTable: "users"}}},
+				{Name: "memberships", ForeignKeys: []schema.ForeignKey{{
+					Name: "memberships_user_fkey", Columns: []string{"tenant_id", "user_id"},
+					ReferencedTable: "users", ReferencedColumns: []string{"tenant_id", "id"},
+				}}},
+				{Name: "profiles", ForeignKeys: []schema.ForeignKey{{
+					Name: "profiles_user_id_fkey", Columns: []string{"user_id"},
+					ReferencedTable: "users", ReferencedColumns: []string{"id"},
+				}}},
 			}},
-			want: "codegen: table users has multiple join relations; explicit relation API is required",
+			want: "codegen: relation memberships_user_fkey uses a composite foreign key; explicit ON is required",
 		},
 	}
 
@@ -80,6 +86,39 @@ func TestGenerateValidation(t *testing.T) {
 			require.EqualError(t, err, test.want)
 		})
 	}
+}
+
+func TestGenerateMultipleRelations(t *testing.T) {
+	database := schema.Schema{Tables: []schema.Table{
+		{Name: "users", Columns: []schema.Column{{Name: "id", DBType: "int8"}}},
+		{
+			Name:    "addresses",
+			Columns: []schema.Column{{Name: "id", DBType: "int8"}, {Name: "user_id", DBType: "int8"}},
+			ForeignKeys: []schema.ForeignKey{{
+				Name: "addresses_user_id_fkey", Columns: []string{"user_id"},
+				ReferencedTable: "users", ReferencedColumns: []string{"id"},
+			}},
+		},
+		{
+			Name:    "profiles",
+			Columns: []schema.Column{{Name: "id", DBType: "int8"}, {Name: "user_id", DBType: "int8"}},
+			ForeignKeys: []schema.ForeignKey{{
+				Name: "profiles_user_id_fkey", Columns: []string{"user_id"},
+				ReferencedTable: "users", ReferencedColumns: []string{"id"},
+			}},
+		},
+	}}
+
+	generated, err := codegen.Generate(database, codegen.Config{Package: "dbschema"})
+	source := string(generated)
+
+	require.NoError(t, err)
+	require.Contains(t, source, "var AddressesUserID = AddressesUserIDRelationDef{}")
+	require.Contains(t, source, "func (AddressesUserIDRelationDef) LeftJoin(left UserTableDef, right AddressTableDef)")
+	require.Contains(t, source, "on := tiqq.On(left.ID, right.UserID)")
+	require.Contains(t, source, "var ProfilesUserID = ProfilesUserIDRelationDef{}")
+	require.Contains(t, source, "func (ProfilesUserIDRelationDef) InnerJoin(left UserTableDef, right ProfileTableDef)")
+	require.NotContains(t, source, "func (table UserTableDef) LeftJoin(right AddressTableDef")
 }
 
 func TestGenerateSelfJoinAliases(t *testing.T) {

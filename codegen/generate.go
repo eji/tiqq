@@ -16,8 +16,9 @@ type Config struct {
 	Package string
 }
 
-// Generate emits table definitions and unambiguous FK-based InnerJoin and
-// LeftJoin types. The output is gofmt formatted and deterministic.
+// Generate emits table definitions and FK-based InnerJoin and LeftJoin types.
+// Ambiguous parents receive explicit relation objects. The output is gofmt
+// formatted and deterministic.
 func Generate(database schema.Schema, config Config) ([]byte, error) {
 	if config.Package == "" {
 		return nil, fmt.Errorf("codegen: package name is required")
@@ -39,11 +40,21 @@ func Generate(database schema.Schema, config Config) ([]byte, error) {
 	for _, table := range tables {
 		writeTable(&output, table)
 	}
+	relationCounts := countRelationsByParent(relations)
+	selfRelationsWritten := map[string]bool{}
 	for _, relation := range relations {
 		if relation.parent.Name == relation.child.Name {
+			if selfRelationsWritten[relation.parent.Name] {
+				continue
+			}
 			writeSelfRelation(&output, relation.parent)
-		} else {
+			selfRelationsWritten[relation.parent.Name] = true
+		} else if relationCounts[relation.parent.Name] == 1 {
 			writeRelation(&output, relation.parent, relation.child)
+		} else {
+			if err := writeNamedRelation(&output, relation); err != nil {
+				return nil, err
+			}
 		}
 	}
 	formatted, err := format.Source(output.Bytes())
@@ -105,14 +116,16 @@ func usesNullable(tables []schema.Table) bool {
 	return false
 }
 
-type relation struct{ parent, child schema.Table }
+type relation struct {
+	parent, child schema.Table
+	foreignKey    schema.ForeignKey
+}
 
 func relationsByParent(tables []schema.Table) ([]relation, error) {
 	byName := make(map[string]schema.Table, len(tables))
 	for _, table := range tables {
 		byName[table.Name] = table
 	}
-	counts := map[string]int{}
 	var result []relation
 	for _, child := range tables {
 		for _, foreignKey := range child.ForeignKeys {
@@ -120,16 +133,82 @@ func relationsByParent(tables []schema.Table) ([]relation, error) {
 			if !found {
 				return nil, fmt.Errorf("codegen: foreign key %s references unknown table %s", foreignKey.Name, foreignKey.ReferencedTable)
 			}
-			counts[parent.Name]++
-			result = append(result, relation{parent: parent, child: child})
-		}
-	}
-	for table, count := range counts {
-		if count > 1 {
-			return nil, fmt.Errorf("codegen: table %s has multiple join relations; explicit relation API is required", table)
+			result = append(result, relation{parent: parent, child: child, foreignKey: foreignKey})
 		}
 	}
 	return result, nil
+}
+
+func countRelationsByParent(relations []relation) map[string]int {
+	counts := make(map[string]int, len(relations))
+	for _, relation := range relations {
+		counts[relation.parent.Name]++
+	}
+	return counts
+}
+
+func writeNamedRelation(output *bytes.Buffer, relation relation) error {
+	foreignKey := relation.foreignKey
+	if len(foreignKey.Columns) != 1 || len(foreignKey.ReferencedColumns) != 1 {
+		return fmt.Errorf("codegen: relation %s uses a composite foreign key; explicit ON is required", foreignKey.Name)
+	}
+	parentColumn, found := findColumn(relation.parent, foreignKey.ReferencedColumns[0])
+	if !found {
+		return fmt.Errorf("codegen: relation %s references unknown column %s.%s", foreignKey.Name, relation.parent.Name, foreignKey.ReferencedColumns[0])
+	}
+	childColumn, found := findColumn(relation.child, foreignKey.Columns[0])
+	if !found {
+		return fmt.Errorf("codegen: relation %s references unknown column %s.%s", foreignKey.Name, relation.child.Name, foreignKey.Columns[0])
+	}
+	name := relationIdentifier(relation)
+	parentName := exported(singular(relation.parent.Name))
+	childName := exported(singular(relation.child.Name))
+	scope := name + "Scope"
+	leftView := "joined" + name + parentName + "View"
+	rightView := "joined" + name + childName + "View"
+	nullableRightView := "nullable" + name + childName + "View"
+	fmt.Fprintf(output, "type %s struct{}\n\n", scope)
+	writeView(output, leftView, scope, relation.parent, false)
+	writeView(output, rightView, scope, relation.child, false)
+	writeView(output, nullableRightView, scope, relation.child, true)
+	fmt.Fprintf(output, "type %sRelationDef struct{}\nvar %s = %sRelationDef{}\n\n", name, name, name)
+	fmt.Fprintf(output, "type %sInnerJoin struct { left %s; right %s; source tiqq.Source }\n", name, leftView, rightView)
+	fmt.Fprintf(output, "type %sLeftJoin struct { left %s; right %s; source tiqq.Source }\n\n", name, leftView, nullableRightView)
+	writeNamedJoinConstructor(output, name, parentName, childName, scope, leftView, rightView, relation, parentColumn, childColumn, "Inner", false)
+	writeNamedJoinConstructor(output, name, parentName, childName, scope, leftView, nullableRightView, relation, parentColumn, childColumn, "Left", true)
+	writeJoinMethods(output, name+"InnerJoin", leftView, rightView, scope)
+	writeJoinMethods(output, name+"LeftJoin", leftView, nullableRightView, scope)
+	return nil
+}
+
+func writeNamedJoinConstructor(output *bytes.Buffer, name, parentName, childName, scope, leftView, rightView string, relation relation, parentColumn, childColumn schema.Column, kind string, outer bool) {
+	joinType := name + kind + "Join"
+	fmt.Fprintf(output, "func (%sRelationDef) %sJoin(left %sTableDef, right %sTableDef) %s {\n", name, kind, parentName, childName, joinType)
+	fmt.Fprintf(output, "on := tiqq.On(left.%s, right.%s)\n", exported(parentColumn.Name), exported(childColumn.Name))
+	fmt.Fprintf(output, "return %s{left: %s{\n", joinType, leftView)
+	writeRebindings(output, "left", parentName+"Scope", scope, relation.parent, false)
+	fmt.Fprintf(output, "}, right: %s{\n", rightView)
+	writeRebindings(output, "right", childName+"Scope", scope, relation.child, outer)
+	fmt.Fprintf(output, "}, source: tiqq.New%sJoinSource(%q, %q, on)}\n}\n\n", kind, relation.parent.Name, relation.child.Name)
+}
+
+func relationIdentifier(relation relation) string {
+	name := strings.TrimSuffix(relation.foreignKey.Name, "_fkey")
+	if name == "" {
+		name = relation.child.Name + "_" + strings.Join(relation.foreignKey.Columns, "_")
+	} else if !strings.HasPrefix(name, relation.child.Name+"_") {
+		name = relation.child.Name + "_" + name
+	}
+	return exported(name)
+}
+
+func findColumn(table schema.Table, name string) (schema.Column, bool) {
+	for _, column := range table.Columns {
+		if column.Name == name {
+			return column, true
+		}
+	}
+	return schema.Column{}, false
 }
 
 func writeTable(output *bytes.Buffer, table schema.Table) {

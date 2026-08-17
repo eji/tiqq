@@ -2,7 +2,7 @@
 
 `tiqq` is a small typed query builder for Go 1.27. This repository currently
 contains the first prototype: typed columns and predicates, explicit SELECT,
-LEFT JOIN scope rebinding, PostgreSQL placeholders, projection metadata, and
+JOIN scope rebinding, dialect-aware placeholders, projection metadata, and
 typed result access.
 
 The prototype supports `InnerJoin` and `LeftJoin`. An inner join keeps both
@@ -61,7 +61,20 @@ callers do not pass a dialect or override the schema's source database.
 
 PostgreSQL and MySQL schema IR generate dialect-specific table metadata and
 insert builders. MySQL rendering uses backtick-quoted identifiers and `?`
-placeholders. Direct MySQL database introspection will be added separately.
+placeholders.
+
+Generate directly from a PostgreSQL or MySQL database:
+
+```sh
+DATABASE_URL='postgres://user:pass@localhost/app' \
+  go run ./cmd/tiqq-gen postgres -schema public -package schema -output schema_gen.go
+
+MYSQL_DATABASE_URL='user:pass@tcp(localhost:3306)/app' \
+  go run ./cmd/tiqq-gen mysql -database app -package schema -output schema_gen.go
+```
+
+The database driver is used only by the generator CLI; query execution remains
+the application's responsibility.
 
 For a statically defined query that should fail fast during development, use
 `q.MustBuild()`; it panics with the same validation error.

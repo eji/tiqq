@@ -31,6 +31,7 @@ type Column struct {
 	Default   *string
 	Generated bool
 	Identity  bool
+	Unsigned  bool
 }
 
 type Key struct {

@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/eji/tiqq/codegen"
+	mysqlintrospect "github.com/eji/tiqq/introspect/mysql"
 	postgresintrospect "github.com/eji/tiqq/introspect/postgres"
 	"github.com/eji/tiqq/schema"
+	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 )
@@ -29,6 +31,9 @@ func dispatch(arguments []string) error {
 	if len(arguments) > 0 && arguments[0] == "postgres" {
 		return runPostgresCLI(arguments[1:], defaultPostgresDependencies())
 	}
+	if len(arguments) > 0 && arguments[0] == "mysql" {
+		return runMySQLCLI(arguments[1:], defaultMySQLDependencies())
+	}
 	flags := flag.NewFlagSet("tiqq-gen", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	packageName := flags.String("package", "schema", "generated Go package name")
@@ -38,6 +43,75 @@ func dispatch(arguments []string) error {
 		return err
 	}
 	return run(*packageName, *inputPath, *outputPath)
+}
+
+type mysqlDependencies struct {
+	lookupEnv  func(string) (string, bool)
+	open       func(string) (*sql.DB, error)
+	introspect func(context.Context, *sql.DB, string) (schema.Schema, error)
+	generate   func(schema.Schema, codegen.Config) ([]byte, error)
+	write      func(string, []byte, io.Writer) error
+	stdout     io.Writer
+}
+
+func defaultMySQLDependencies() mysqlDependencies {
+	return mysqlDependencies{
+		lookupEnv: os.LookupEnv,
+		open: func(dsn string) (*sql.DB, error) {
+			configuration, err := mysqldriver.ParseDSN(dsn)
+			if err != nil {
+				return nil, fmt.Errorf("invalid MySQL DSN")
+			}
+			connector, err := mysqldriver.NewConnector(configuration)
+			if err != nil {
+				return nil, fmt.Errorf("configure MySQL driver: %w", err)
+			}
+			return sql.OpenDB(connector), nil
+		},
+		introspect: mysqlintrospect.Introspect,
+		generate:   codegen.Generate,
+		write:      writeGenerated,
+		stdout:     os.Stdout,
+	}
+}
+
+func runMySQLCLI(arguments []string, dependencies mysqlDependencies) error {
+	flags := flag.NewFlagSet("tiqq-gen mysql", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	dsnEnvironment := flags.String("dsn-env", "MYSQL_DATABASE_URL", "environment variable containing the MySQL DSN")
+	databaseName := flags.String("database", "", "MySQL database name")
+	packageName := flags.String("package", "schema", "generated Go package name")
+	outputPath := flags.String("output", "schema_gen.go", "generated Go output file, or - for stdout")
+	timeout := flags.Duration("timeout", 10*time.Second, "connection and introspection timeout")
+	if err := flags.Parse(arguments); err != nil {
+		return err
+	}
+	if *databaseName == "" {
+		return fmt.Errorf("MySQL database name is required")
+	}
+	dsn, found := dependencies.lookupEnv(*dsnEnvironment)
+	if !found || dsn == "" {
+		return fmt.Errorf("MySQL DSN environment variable %s is not set", *dsnEnvironment)
+	}
+	database, err := dependencies.open(dsn)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+	if err := database.PingContext(ctx); err != nil {
+		return fmt.Errorf("connect to MySQL: %w", err)
+	}
+	databaseSchema, err := dependencies.introspect(ctx, database, *databaseName)
+	if err != nil {
+		return err
+	}
+	generated, err := dependencies.generate(databaseSchema, codegen.Config{Package: *packageName})
+	if err != nil {
+		return err
+	}
+	return dependencies.write(*outputPath, generated, dependencies.stdout)
 }
 
 func run(packageName, inputPath, outputPath string) error {

@@ -61,17 +61,17 @@ func RebindExistingNullable[From, To, T any](c Column[From, sql.Null[T], T]) Col
 	return Column[To, sql.Null[T], T]{ref: c.ref}
 }
 
-func (c Column[S, V, C]) Eq(value C) Predicate[S]   { return comparison[S](c.ref, "=", value) }
-func (c Column[S, V, C]) Ne(value C) Predicate[S]   { return comparison[S](c.ref, "<>", value) }
-func (c Column[S, V, C]) Gt(value C) Predicate[S]   { return comparison[S](c.ref, ">", value) }
-func (c Column[S, V, C]) Gte(value C) Predicate[S]  { return comparison[S](c.ref, ">=", value) }
-func (c Column[S, V, C]) Lt(value C) Predicate[S]   { return comparison[S](c.ref, "<", value) }
-func (c Column[S, V, C]) Lte(value C) Predicate[S]  { return comparison[S](c.ref, "<=", value) }
-func (c Column[S, V, C]) Like(value C) Predicate[S] { return comparison[S](c.ref, "LIKE", value) }
+func (c Column[S, V, C]) Eq(value C) Predicate   { return comparison(c.ref, "=", value) }
+func (c Column[S, V, C]) Ne(value C) Predicate   { return comparison(c.ref, "<>", value) }
+func (c Column[S, V, C]) Gt(value C) Predicate   { return comparison(c.ref, ">", value) }
+func (c Column[S, V, C]) Gte(value C) Predicate  { return comparison(c.ref, ">=", value) }
+func (c Column[S, V, C]) Lt(value C) Predicate   { return comparison(c.ref, "<", value) }
+func (c Column[S, V, C]) Lte(value C) Predicate  { return comparison(c.ref, "<=", value) }
+func (c Column[S, V, C]) Like(value C) Predicate { return comparison(c.ref, "LIKE", value) }
 
 func (c Column[S, V, C]) selection() columnRef { return c.ref }
 
 // Selection is the closed set of selectable expressions for scope S.
-type Selection[S any] interface {
+type Selection interface {
 	selection() columnRef
 }

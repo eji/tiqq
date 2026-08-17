@@ -35,9 +35,8 @@ and the hook uses the system executables without downloading another toolchain.
 To scan the full Git history manually, run `make secrets`.
 
 ```go
-j := UserTable.LeftJoin(
-	AddressTable,
-	tiqq.On(UserTable.ID, AddressTable.UserID),
+j := UserTable.LeftJoin(AddressTable).On(
+	tiqq.Eq(UserTable.ID, AddressTable.UserID),
 )
 
 q := j.Where(
@@ -70,9 +69,8 @@ remain distinct:
 employee := UserTable.As("employee")
 manager := UserTable.As("manager")
 
-j := employee.LeftJoin(
-	manager,
-	tiqq.On(employee.ManagerID, manager.ID),
+j := employee.LeftJoin(manager).On(
+	tiqq.Eq(employee.ManagerID, manager.ID),
 )
 
 q := j.Select(
@@ -84,9 +82,9 @@ employeeName := row.Get(j.Left().Name)  // string
 managerName := row.Get(j.Right().Name)  // sql.Null[string]
 ```
 
-The generator emits `As`, `InnerJoin`, and `LeftJoin` alias APIs for
-self-referencing foreign keys. Empty or duplicate aliases are rejected before
-SQL is built.
+The generator emits one generic `InnerJoin` and `LeftJoin` method per table,
+plus `As` for self joins. Empty aliases are rejected immediately and duplicate
+aliases are rejected by `Build`.
 
 This prototype intentionally requires Go 1.27 generic methods. At the time of
 writing, Go 1.27 is not yet generally released, so use a Go 1.27 prerelease
@@ -114,9 +112,25 @@ Internally, `introspect/postgres` converts `information_schema` into the Schema
 IR in `schema`, which `codegen` then consumes. This intermediate representation
 is an implementation boundary, not a required user-managed artifact.
 
-The generator emits typed tables and unambiguous FK-based inner/left joins.
-Multiple relations from the same parent require an explicit relation API and
-are currently rejected instead of producing ambiguous Go methods.
+The generator embeds foreign-key metadata in each typed table. A unique
+single-column relation lets `Build` infer `ON`:
+
+```go
+j := UserTable.LeftJoin(AddressTable)
+```
+
+For a join without an FK, with multiple possible FKs, or with extra conditions,
+provide the SQL predicates explicitly:
+
+```go
+j := UserTable.LeftJoin(AuditLogTable).On(
+	tiqq.Eq(UserTable.ID, AuditLogTable.ActorID),
+	AuditLogTable.Active.Eq(true),
+)
+```
+
+Column value and comparison types are checked by the compiler. `Build` checks
+that `ON`, `WHERE`, and `SELECT` columns belong to the query.
 
 It can also be used with `go generate` without putting credentials in source or
 process arguments:

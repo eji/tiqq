@@ -9,17 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func prototypeJoin() UserAddressJoin {
-	return UserTable.LeftJoin(
-		AddressTable,
-		tiqq.On(UserTable.ID, AddressTable.UserID),
-	)
+func prototypeJoin() tiqq.Joined[UserTableDef, NullableAddressTableDef] {
+	return UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 }
 
 func TestBuild(t *testing.T) {
-	j := prototypeJoin()
+	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 	tests := map[string]struct {
-		predicates []tiqq.Predicate[UserAddressScope]
+		predicates []tiqq.Predicate
 		wantSQL    string
 		wantArgs   []any
 	}{
@@ -28,7 +25,7 @@ func TestBuild(t *testing.T) {
 			wantArgs: nil,
 		},
 		"with predicates": {
-			predicates: []tiqq.Predicate[UserAddressScope]{
+			predicates: []tiqq.Predicate{
 				j.Left().ID.Eq(int64(100)),
 				j.Right().Address.Like("Tokyo%"),
 			},
@@ -53,8 +50,7 @@ func TestBuild(t *testing.T) {
 func TestInnerJoin(t *testing.T) {
 	j := UserTable.InnerJoin(
 		AddressTable,
-		tiqq.On(UserTable.ID, AddressTable.UserID),
-	)
+	).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 	stmt := j.
 		Where(j.Right().Address.Like("Tokyo%")).
 		Select(j.Left().ID, j.Right().Address).
@@ -72,13 +68,75 @@ func TestInnerJoin(t *testing.T) {
 	require.Equal(t, "Tokyo", row.Get(j.Right().Address))
 }
 
+func TestLeftJoinInfersForeignKey(t *testing.T) {
+	j := UserTable.LeftJoin(AddressTable)
+	stmt := j.Select(j.Left().ID, j.Right().Address).Build()
+
+	require.Equal(
+		t,
+		`SELECT "users"."id", "addresses"."address" FROM "users" LEFT JOIN "addresses" ON "addresses"."user_id" = "users"."id"`,
+		stmt.SQL(),
+	)
+}
+
+func TestLeftJoinExplicitOnPredicates(t *testing.T) {
+	j := UserTable.LeftJoin(AuditLogTable).On(
+		tiqq.Eq(UserTable.ID, AuditLogTable.ActorID),
+		AuditLogTable.Active.Eq(true),
+	)
+	stmt := j.
+		Where(j.Left().ID.Eq(100)).
+		Select(j.Left().ID, j.Right().Message).
+		Build()
+
+	require.Equal(
+		t,
+		`SELECT "users"."id", "audit_logs"."message" FROM "users" LEFT JOIN "audit_logs" ON "users"."id" = "audit_logs"."actor_id" AND "audit_logs"."active" = $1 WHERE "users"."id" = $2`,
+		stmt.SQL(),
+	)
+	require.Equal(t, []any{true, int64(100)}, stmt.Args())
+}
+
+func TestJoinBuildValidation(t *testing.T) {
+	tests := map[string]struct {
+		build     func()
+		wantPanic string
+	}{
+		"missing foreign key requires ON": {
+			build: func() {
+				joined := UserTable.LeftJoin(AuditLogTable)
+				joined.Select(joined.Left().ID).Build()
+			},
+			wantPanic: "tiqq: JOIN requires ON because no foreign key matches",
+		},
+		"ON rejects unrelated table": {
+			build: func() {
+				joined := UserTable.LeftJoin(AuditLogTable).
+					On(tiqq.Eq(CompanyTable.ID, AuditLogTable.ActorID))
+				joined.Select(joined.Left().ID).Build()
+			},
+			wantPanic: "tiqq: ON column companies.id is not in query scope",
+		},
+		"SELECT rejects unrelated table": {
+			build: func() {
+				joined := UserTable.LeftJoin(AddressTable)
+				joined.Select(CompanyTable.Name).Build()
+			},
+			wantPanic: "tiqq: SELECT column companies.name is not in query scope",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.PanicsWithValue(t, test.wantPanic, test.build)
+		})
+	}
+}
+
 func TestSelfJoinWithAliases(t *testing.T) {
 	employee := UserTable.As("employee")
 	manager := UserTable.As("manager")
-	j := employee.LeftJoin(
-		manager,
-		tiqq.On(employee.ManagerID, manager.ID),
-	)
+	j := employee.LeftJoin(manager).On(tiqq.Eq(employee.ManagerID, manager.ID))
 	stmt := j.
 		Where(j.Left().Name.Like("A%")).
 		Select(j.Left().ID, j.Left().Name, j.Right().Name).
@@ -111,9 +169,9 @@ func TestSelfJoinAliasValidation(t *testing.T) {
 			run: func() {
 				left := UserTable.As("user")
 				right := UserTable.As("user")
-				left.LeftJoin(right, tiqq.On(left.ManagerID, right.ID))
+				left.LeftJoin(right).Select(left.ID).Build()
 			},
-			wantPanic: "tiqq: self join aliases must be distinct",
+			wantPanic: "tiqq: table aliases must be distinct",
 		},
 	}
 
@@ -125,9 +183,9 @@ func TestSelfJoinAliasValidation(t *testing.T) {
 }
 
 func TestPredicateOperators(t *testing.T) {
-	j := prototypeJoin()
+	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 	tests := map[string]struct {
-		predicate tiqq.Predicate[UserAddressScope]
+		predicate tiqq.Predicate
 		wantSQL   string
 		wantArg   any
 	}{
@@ -150,7 +208,7 @@ func TestPredicateOperators(t *testing.T) {
 }
 
 func TestTypedRowGet(t *testing.T) {
-	j := prototypeJoin()
+	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 	stmt := j.Select(j.Left().ID, j.Left().Name, j.Right().Address).Build()
 	wantAddress := sql.Null[string]{V: "Tokyo", Valid: true}
 	row, err := tiqq.NewRow(stmt, int64(100), "Alice", wantAddress)
@@ -162,7 +220,7 @@ func TestTypedRowGet(t *testing.T) {
 }
 
 func TestRowValidation(t *testing.T) {
-	j := prototypeJoin()
+	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 	tests := map[string]struct {
 		run       func()
 		wantPanic string
@@ -195,7 +253,7 @@ func TestRowValidation(t *testing.T) {
 }
 
 func TestNewRowRejectsProjectionLengthMismatch(t *testing.T) {
-	j := prototypeJoin()
+	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 	stmt := j.Select(j.Left().ID, j.Left().Name).Build()
 	_, err := tiqq.NewRow(stmt, int64(1))
 
@@ -203,7 +261,7 @@ func TestNewRowRejectsProjectionLengthMismatch(t *testing.T) {
 }
 
 func TestBuildRequiresProjection(t *testing.T) {
-	j := prototypeJoin()
+	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 	require.PanicsWithValue(
 		t,
 		"tiqq: SELECT requires at least one column",
@@ -212,7 +270,7 @@ func TestBuildRequiresProjection(t *testing.T) {
 }
 
 func TestStatementArgsReturnsCopy(t *testing.T) {
-	j := prototypeJoin()
+	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 	stmt := j.Select(j.Left().ID).Where(j.Left().ID.Eq(1)).Build()
 	args := stmt.Args()
 	args[0] = int64(999)
@@ -221,7 +279,7 @@ func TestStatementArgsReturnsCopy(t *testing.T) {
 }
 
 func TestQueryIsImmutable(t *testing.T) {
-	j := prototypeJoin()
+	j := UserTable.LeftJoin(AddressTable).On(tiqq.Eq(UserTable.ID, AddressTable.UserID))
 	base := j.Select(j.Left().ID)
 	filtered := base.Where(j.Left().ID.Eq(1))
 

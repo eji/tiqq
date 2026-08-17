@@ -40,10 +40,10 @@ func TestGenerate(t *testing.T) {
 	require.Contains(t, source, "DisplayName tiqq.Column[UserScope, string, string]")
 	require.Contains(t, source, "tiqq.Column[UserScope, tiqq.Decimal, tiqq.Decimal]")
 	require.Contains(t, source, "Address tiqq.Column[AddressScope, sql.Null[string], string]")
-	require.Contains(t, source, "func (table UserTableDef) InnerJoin(right AddressTableDef")
-	require.Contains(t, source, "func (table UserTableDef) LeftJoin(right AddressTableDef")
-	require.Contains(t, source, `tiqq.NewInnerJoinSource("users", "addresses", on)`)
-	require.Contains(t, source, `tiqq.NewLeftJoinSource("users", "addresses", on)`)
+	require.Contains(t, source, "type NullableAddressTableDef struct")
+	require.Contains(t, source, "func (table UserTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]]")
+	require.Contains(t, source, "func (table UserTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]]")
+	require.Contains(t, source, `Columns: []string{"user_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}`)
 }
 
 func TestGenerateValidation(t *testing.T) {
@@ -63,15 +63,6 @@ func TestGenerateValidation(t *testing.T) {
 			}}},
 			want: "codegen: foreign key missing_fk references unknown table users",
 		},
-		"join relation must be unambiguous": {
-			config: codegen.Config{Package: "dbschema"},
-			database: schema.Schema{Tables: []schema.Table{
-				{Name: "users"},
-				{Name: "addresses", ForeignKeys: []schema.ForeignKey{{ReferencedTable: "users"}}},
-				{Name: "profiles", ForeignKeys: []schema.ForeignKey{{ReferencedTable: "users"}}},
-			}},
-			want: "codegen: table users has multiple join relations; explicit relation API is required",
-		},
 	}
 
 	for name, test := range tests {
@@ -80,6 +71,37 @@ func TestGenerateValidation(t *testing.T) {
 			require.EqualError(t, err, test.want)
 		})
 	}
+}
+
+func TestGenerateMultipleRelations(t *testing.T) {
+	database := schema.Schema{Tables: []schema.Table{
+		{Name: "users", Columns: []schema.Column{{Name: "id", DBType: "int8"}}},
+		{
+			Name:    "addresses",
+			Columns: []schema.Column{{Name: "id", DBType: "int8"}, {Name: "user_id", DBType: "int8"}},
+			ForeignKeys: []schema.ForeignKey{{
+				Name: "addresses_user_id_fkey", Columns: []string{"user_id"},
+				ReferencedTable: "users", ReferencedColumns: []string{"id"},
+			}},
+		},
+		{
+			Name:    "profiles",
+			Columns: []schema.Column{{Name: "id", DBType: "int8"}, {Name: "user_id", DBType: "int8"}},
+			ForeignKeys: []schema.ForeignKey{{
+				Name: "profiles_user_id_fkey", Columns: []string{"user_id"},
+				ReferencedTable: "users", ReferencedColumns: []string{"id"},
+			}},
+		},
+	}}
+
+	generated, err := codegen.Generate(database, codegen.Config{Package: "dbschema"})
+	source := string(generated)
+
+	require.NoError(t, err)
+	require.Contains(t, source, "func (table UserTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]]")
+	require.Contains(t, source, "func (table AddressTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]]")
+	require.Contains(t, source, "func (table ProfileTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]]")
+	require.NotContains(t, source, "RelationDef")
 }
 
 func TestGenerateSelfJoinAliases(t *testing.T) {
@@ -100,10 +122,8 @@ func TestGenerateSelfJoinAliases(t *testing.T) {
 	source := string(generated)
 
 	require.NoError(t, err)
-	require.Contains(t, source, "type UserAliasTableDef struct")
-	require.Contains(t, source, "func (table UserTableDef) As(alias string) UserAliasTableDef")
-	require.Contains(t, source, "func (left UserAliasTableDef) LeftJoin(right UserAliasTableDef")
-	require.Contains(t, source, "func (left UserAliasTableDef) InnerJoin(right UserAliasTableDef")
-	require.Contains(t, source, `tiqq.NewAliasedLeftJoinSource("users", left.alias, "users", right.alias, on)`)
-	require.NotContains(t, source, "func (table UserTableDef) LeftJoin(right UserTableDef")
+	require.Contains(t, source, "func (table UserTableDef) As(alias string) UserTableDef")
+	require.Contains(t, source, "func (table UserTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]]")
+	require.Contains(t, source, "table.ManagerID = tiqq.AliasColumn[UserScope, UserScope](table.ManagerID, alias)")
+	require.NotContains(t, source, "UserAliasTableDef")
 }

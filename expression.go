@@ -1,7 +1,6 @@
 package tiqq
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -93,44 +92,42 @@ func logical(operator string, predicates []Predicate) Predicate {
 	}}
 }
 
-func quoteIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
-
-func renderColumn(c columnRef) string {
-	if c.sql != "" {
-		return c.sql
+func renderColumn(renderer sqlRenderer, c columnRef) string {
+	if c.aggregate {
+		return c.function + "(" + renderColumn(renderer, *c.input) + ")"
 	}
-	return quoteIdent(c.qualifier) + "." + quoteIdent(c.name)
+	return renderer.quoteIdentifier(c.qualifier) + "." + renderer.quoteIdentifier(c.name)
 }
 
-func renderPredicate(p Predicate, nextArg *int) (string, []any) {
+func renderPredicate(renderer sqlRenderer, p Predicate, nextArg *int) (string, []any) {
 	switch p.node.kind {
 	case columnComparison:
-		return renderColumn(p.node.left) + " " + p.node.op + " " + renderColumn(p.node.rightColumn), nil
+		return renderColumn(renderer, p.node.left) + " " + p.node.op + " " + renderColumn(renderer, p.node.rightColumn), nil
 	case listComparison:
 		placeholders := make([]string, len(p.node.values))
 		for index := range p.node.values {
-			placeholders[index] = fmt.Sprintf("$%d", *nextArg)
+			placeholders[index] = renderer.placeholder(*nextArg)
 			*nextArg = *nextArg + 1
 		}
-		return renderColumn(p.node.left) + " " + p.node.op + " (" + strings.Join(placeholders, ", ") + ")", append([]any(nil), p.node.values...)
+		return renderColumn(renderer, p.node.left) + " " + p.node.op + " (" + strings.Join(placeholders, ", ") + ")", append([]any(nil), p.node.values...)
 	case nullComparison:
-		return renderColumn(p.node.left) + " " + p.node.op, nil
+		return renderColumn(renderer, p.node.left) + " " + p.node.op, nil
 	case logicalExpression:
 		parts := make([]string, len(p.node.children))
 		var arguments []any
 		for index, child := range p.node.children {
-			text, values := renderPredicate(child, nextArg)
+			text, values := renderPredicate(renderer, child, nextArg)
 			parts[index] = text
 			arguments = append(arguments, values...)
 		}
 		return "(" + strings.Join(parts, " "+p.node.op+" ") + ")", arguments
 	case negatedExpression:
-		text, arguments := renderPredicate(p.node.children[0], nextArg)
+		text, arguments := renderPredicate(renderer, p.node.children[0], nextArg)
 		return "NOT (" + text + ")", arguments
 	case valueComparison:
 		placeholder := *nextArg
 		*nextArg = *nextArg + 1
-		return fmt.Sprintf("%s %s $%d", renderColumn(p.node.left), p.node.op, placeholder), []any{p.node.value}
+		return renderColumn(renderer, p.node.left) + " " + p.node.op + " " + renderer.placeholder(placeholder), []any{p.node.value}
 	default:
 		panic("tiqq: unknown predicate expression")
 	}

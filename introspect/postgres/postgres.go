@@ -11,7 +11,7 @@ import (
 )
 
 func Introspect(ctx context.Context, db *sql.DB, schemaName string) (schema.Schema, error) {
-	result := schema.Schema{Name: schemaName}
+	result := schema.Schema{Dialect: schema.PostgreSQL, Name: schemaName}
 	tables := map[string]int{}
 
 	rows, err := db.QueryContext(ctx, columnsSQL, schemaName)

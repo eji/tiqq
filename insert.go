@@ -32,6 +32,10 @@ func (query InsertQuery[S]) Values(values ...InsertValue[S]) InsertQuery[S] {
 }
 
 func (query InsertQuery[S]) Build() (Statement, error) {
+	renderer, err := rendererFor(query.table)
+	if err != nil {
+		return Statement{}, err
+	}
 	if len(query.rows) == 0 || len(query.rows[0]) == 0 {
 		return Statement{}, fmt.Errorf("tiqq: INSERT requires at least one value")
 	}
@@ -70,13 +74,13 @@ func (query InsertQuery[S]) Build() (Statement, error) {
 
 	var builder strings.Builder
 	builder.WriteString("INSERT INTO ")
-	renderTable(&builder, query.table)
+	renderTable(renderer, &builder, query.table)
 	builder.WriteString(" (")
 	for index, value := range query.rows[0] {
 		if index > 0 {
 			builder.WriteString(", ")
 		}
-		builder.WriteString(quoteIdent(value.column.name))
+		builder.WriteString(renderer.quoteIdentifier(value.column.name))
 	}
 	builder.WriteString(") VALUES ")
 	args := make([]any, 0, len(query.rows)*len(query.rows[0]))
@@ -87,7 +91,7 @@ func (query InsertQuery[S]) Build() (Statement, error) {
 		}
 		placeholders := make([]string, len(row))
 		for index, value := range row {
-			placeholders[index] = fmt.Sprintf("$%d", nextArg)
+			placeholders[index] = renderer.placeholder(nextArg)
 			nextArg++
 			args = append(args, value.value)
 		}

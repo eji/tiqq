@@ -55,6 +55,10 @@ if err != nil {
 rows, err := db.QueryContext(ctx, stmt.SQL(), stmt.Args()...)
 ```
 
+Generated tables retain the SQL dialect of their introspected schema. `Build`
+uses that metadata for identifier quoting, placeholders, and feature validation;
+callers do not pass a dialect or override the schema's source database.
+
 For a statically defined query that should fail fast during development, use
 `q.MustBuild()`; it panics with the same validation error.
 

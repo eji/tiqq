@@ -10,9 +10,10 @@ type Aggregate[S, V, C any] struct {
 }
 
 func aggregate[S, V, C any](function string, input columnRef) Aggregate[S, V, C] {
-	text := function + "(" + renderColumn(input) + ")"
+	id := function + "(" + input.id + ")"
 	return Aggregate[S, V, C]{ref: columnRef{
-		id: text, qualifier: input.qualifier, name: input.name, sql: text, aggregate: true,
+		id: id, qualifier: input.qualifier, name: input.name, aggregate: true,
+		function: function, input: &input,
 	}}
 }
 

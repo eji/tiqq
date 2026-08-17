@@ -7,6 +7,8 @@ import (
 	"github.com/eji/tiqq"
 )
 
+var tiqqSchema = tiqq.NewSchemaInfo(tiqq.PostgreSQL)
+
 type AddressScope struct{}
 
 type AddressTableDef struct {
@@ -25,7 +27,7 @@ type NullableAddressTableDef struct {
 }
 
 var AddressTable = AddressTableDef{
-	ref:       tiqq.NewTableRef("addresses"),
+	ref:       tiqqSchema.Table("addresses"),
 	ID:        tiqq.RequiredNumericColumn[AddressScope, int64, tiqq.Decimal, tiqq.Decimal]("addresses", "id"),
 	UserID:    tiqq.RequiredNumericColumn[AddressScope, int64, tiqq.Decimal, tiqq.Decimal]("addresses", "user_id"),
 	CompanyID: tiqq.RequiredNumericColumn[AddressScope, int64, tiqq.Decimal, tiqq.Decimal]("addresses", "company_id"),
@@ -92,7 +94,7 @@ type NullableAuditLogTableDef struct {
 }
 
 var AuditLogTable = AuditLogTableDef{
-	ref:     tiqq.NewTableRef("audit_logs"),
+	ref:     tiqqSchema.Table("audit_logs"),
 	ID:      tiqq.RequiredNumericColumn[AuditLogScope, int64, tiqq.Decimal, tiqq.Decimal]("audit_logs", "id"),
 	ActorID: tiqq.RequiredNumericColumn[AuditLogScope, int64, tiqq.Decimal, tiqq.Decimal]("audit_logs", "actor_id"),
 	Active:  tiqq.RequiredColumn[AuditLogScope, bool]("audit_logs", "active"),
@@ -155,7 +157,7 @@ type NullableCompanyTableDef struct {
 }
 
 var CompanyTable = CompanyTableDef{
-	ref:  tiqq.NewTableRef("companies"),
+	ref:  tiqqSchema.Table("companies"),
 	ID:   tiqq.RequiredNumericColumn[CompanyScope, int64, tiqq.Decimal, tiqq.Decimal]("companies", "id"),
 	Name: tiqq.RequiredColumn[CompanyScope, string]("companies", "name"),
 }
@@ -214,7 +216,7 @@ type NullableUserTableDef struct {
 }
 
 var UserTable = UserTableDef{
-	ref:       tiqq.NewTableRef("users"),
+	ref:       tiqqSchema.Table("users"),
 	ID:        tiqq.RequiredNumericColumn[UserScope, int64, tiqq.Decimal, tiqq.Decimal]("users", "id"),
 	Name:      tiqq.RequiredColumn[UserScope, string]("users", "name"),
 	ManagerID: tiqq.NullableNumericColumn[UserScope, int64, tiqq.Decimal, tiqq.Decimal]("users", "manager_id"),

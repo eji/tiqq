@@ -83,14 +83,14 @@ func TestGroupingValidation(t *testing.T) {
 				_, err := AddressTable.GroupBy(count).Select(count).Build()
 				return err
 			},
-			want: `tiqq: GROUP BY does not accept aggregate COUNT("addresses"."id")`,
+			want: `tiqq: GROUP BY does not accept aggregate COUNT(addresses.id)`,
 		},
 		"aggregate must belong to query": {
 			build: func() error {
 				_, err := UserTable.Select(AddressTable.ID.Count()).Build()
 				return err
 			},
-			want: `tiqq: SELECT column COUNT("addresses"."id") is not in query scope`,
+			want: `tiqq: SELECT column COUNT(addresses.id) is not in query scope`,
 		},
 		"where does not accept aggregate": {
 			build: func() error {
@@ -98,7 +98,7 @@ func TestGroupingValidation(t *testing.T) {
 				_, err := AddressTable.Where(count.Gt(int64(1))).Select(count).Build()
 				return err
 			},
-			want: `tiqq: WHERE does not accept aggregate COUNT("addresses"."id")`,
+			want: `tiqq: WHERE does not accept aggregate COUNT(addresses.id)`,
 		},
 	}
 

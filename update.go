@@ -36,6 +36,10 @@ func (query UpdateQuery[S]) AllRows() UpdateQuery[S] {
 }
 
 func (query UpdateQuery[S]) Build() (Statement, error) {
+	renderer, err := rendererFor(query.table.ref)
+	if err != nil {
+		return Statement{}, err
+	}
 	if len(query.assignments) == 0 {
 		return Statement{}, fmt.Errorf("tiqq: UPDATE requires at least one SET assignment")
 	}
@@ -58,7 +62,7 @@ func (query UpdateQuery[S]) Build() (Statement, error) {
 
 	var builder strings.Builder
 	builder.WriteString("UPDATE ")
-	renderTable(&builder, query.table.ref)
+	renderTable(renderer, &builder, query.table.ref)
 	builder.WriteString(" SET ")
 	args := make([]any, 0, len(query.assignments)+len(query.predicates))
 	nextArg := 1
@@ -66,8 +70,9 @@ func (query UpdateQuery[S]) Build() (Statement, error) {
 		if index > 0 {
 			builder.WriteString(", ")
 		}
-		builder.WriteString(quoteIdent(assignment.column.name))
-		builder.WriteString(fmt.Sprintf(" = $%d", nextArg))
+		builder.WriteString(renderer.quoteIdentifier(assignment.column.name))
+		builder.WriteString(" = ")
+		builder.WriteString(renderer.placeholder(nextArg))
 		nextArg++
 		args = append(args, assignment.value)
 	}
@@ -77,7 +82,7 @@ func (query UpdateQuery[S]) Build() (Statement, error) {
 			if index > 0 {
 				builder.WriteString(" AND ")
 			}
-			text, values := renderPredicate(predicate, &nextArg)
+			text, values := renderPredicate(renderer, predicate, &nextArg)
 			builder.WriteString(text)
 			args = append(args, values...)
 		}

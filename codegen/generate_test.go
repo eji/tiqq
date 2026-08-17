@@ -36,6 +36,7 @@ func TestGenerate(t *testing.T) {
 	source := string(generated)
 
 	require.NoError(t, err)
+	require.Contains(t, source, "var tiqqSchema = tiqq.NewSchemaInfo(tiqq.PostgreSQL)")
 	require.Contains(t, source, "type UserTableDef struct")
 	require.Contains(t, source, "DisplayName tiqq.Column[UserScope, string, string]")
 	require.Contains(t, source, "tiqq.NumericColumn[UserScope, tiqq.Decimal, tiqq.Decimal, tiqq.Decimal, tiqq.Decimal]")
@@ -66,6 +67,11 @@ func TestGenerateValidation(t *testing.T) {
 				ForeignKeys: []schema.ForeignKey{{Name: "missing_fk", ReferencedTable: "users"}},
 			}}},
 			want: "codegen: foreign key missing_fk references unknown table users",
+		},
+		"dialect must be supported": {
+			config:   codegen.Config{Package: "dbschema"},
+			database: schema.Schema{Dialect: schema.Dialect("unknown")},
+			want:     "codegen: unsupported SQL dialect unknown",
 		},
 	}
 

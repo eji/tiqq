@@ -7,11 +7,14 @@ import (
 
 // TableRef identifies one table occurrence in a query.
 type TableRef struct {
-	name  string
-	alias string
+	name    string
+	alias   string
+	dialect Dialect
 }
 
-func NewTableRef(name string) TableRef { return TableRef{name: name} }
+// NewTableRef constructs a PostgreSQL table reference for manually defined schemas.
+// Generated schemas use SchemaInfo.Table to retain their introspection dialect.
+func NewTableRef(name string) TableRef { return NewSchemaInfo(PostgreSQL).Table(name) }
 
 func (table TableRef) As(alias string) TableRef {
 	if alias == "" {
@@ -208,6 +211,10 @@ func (query Query) Build() (Statement, error) {
 	if len(query.from.tables) == 0 {
 		return Statement{}, fmt.Errorf("tiqq: query requires a source")
 	}
+	renderer, err := queryRenderer(query.from.tables)
+	if err != nil {
+		return Statement{}, err
+	}
 	if err := validateDistinctTableReferences(query.from.tables); err != nil {
 		return Statement{}, err
 	}
@@ -242,11 +249,11 @@ func (query Query) Build() (Statement, error) {
 		if index > 0 {
 			builder.WriteString(", ")
 		}
-		builder.WriteString(renderColumn(column))
+		builder.WriteString(renderColumn(renderer, column))
 	}
 	base := query.from.tables[0]
 	builder.WriteString(" FROM ")
-	renderTable(&builder, base.ref)
+	renderTable(renderer, &builder, base.ref)
 
 	args := make([]any, 0, len(query.predicates))
 	nextArg := 1
@@ -255,7 +262,7 @@ func (query Query) Build() (Statement, error) {
 		builder.WriteByte(' ')
 		builder.WriteString(join.kind)
 		builder.WriteByte(' ')
-		renderTable(&builder, join.right.ref)
+		renderTable(renderer, &builder, join.right.ref)
 		conditions := join.conditions
 		if len(conditions) == 0 {
 			var err error
@@ -278,7 +285,7 @@ func (query Query) Build() (Statement, error) {
 			if index > 0 {
 				builder.WriteString(" AND ")
 			}
-			text, values := renderPredicate(condition, &nextArg)
+			text, values := renderPredicate(renderer, condition, &nextArg)
 			builder.WriteString(text)
 			args = append(args, values...)
 		}
@@ -290,7 +297,7 @@ func (query Query) Build() (Statement, error) {
 			if index > 0 {
 				builder.WriteString(" AND ")
 			}
-			text, values := renderPredicate(predicate, &nextArg)
+			text, values := renderPredicate(renderer, predicate, &nextArg)
 			builder.WriteString(text)
 			args = append(args, values...)
 		}
@@ -301,7 +308,7 @@ func (query Query) Build() (Statement, error) {
 			if index > 0 {
 				builder.WriteString(", ")
 			}
-			builder.WriteString(renderColumn(column))
+			builder.WriteString(renderColumn(renderer, column))
 		}
 	}
 	if len(query.having) > 0 {
@@ -310,7 +317,7 @@ func (query Query) Build() (Statement, error) {
 			if index > 0 {
 				builder.WriteString(" AND ")
 			}
-			text, values := renderPredicate(predicate, &nextArg)
+			text, values := renderPredicate(renderer, predicate, &nextArg)
 			builder.WriteString(text)
 			args = append(args, values...)
 		}
@@ -383,11 +390,28 @@ func validateDistinctTableReferences(tables []tableSource) error {
 	return nil
 }
 
-func renderTable(builder *strings.Builder, table TableRef) {
-	builder.WriteString(quoteIdent(table.name))
+func queryRenderer(tables []tableSource) (sqlRenderer, error) {
+	renderer, err := rendererFor(tables[0].ref)
+	if err != nil {
+		return nil, err
+	}
+	for _, table := range tables[1:] {
+		other, otherErr := rendererFor(table.ref)
+		if otherErr != nil {
+			return nil, otherErr
+		}
+		if renderer.name() != other.name() {
+			return nil, fmt.Errorf("tiqq: cannot combine %s and %s SQL dialects", renderer.name(), other.name())
+		}
+	}
+	return renderer, nil
+}
+
+func renderTable(renderer sqlRenderer, builder *strings.Builder, table TableRef) {
+	builder.WriteString(renderer.quoteIdentifier(table.name))
 	if table.alias != "" {
 		builder.WriteString(" AS ")
-		builder.WriteString(quoteIdent(table.alias))
+		builder.WriteString(renderer.quoteIdentifier(table.alias))
 	}
 }
 

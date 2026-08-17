@@ -111,8 +111,8 @@ func TestInsertBuildValidation(t *testing.T) {
 		},
 		"generated column is rejected": {
 			build: func() error {
-				query := tiqq.NewInsert[UserScope](
-					tiqq.NewTableRef("users"), []string{"name"}, []string{"name"},
+				query := tiqq.NewInsert[UserScope, tiqq.PostgreSQLMarker](
+					tiqq.NewTableRef("users"), []string{"name"}, []string{"name"}, nil,
 				).Values(
 					UserTable.ID.Value(int64(1)), UserTable.Name.Value("Alice"),
 				)

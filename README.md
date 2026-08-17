@@ -91,6 +91,19 @@ stmt, err := q.Build()
 Generated and identity columns are rejected, while omitted required columns
 are reported by `Build`.
 
+PostgreSQL-generated insert builders expose PostgreSQL-specific conflict
+handling. Other dialects can expose their own methods without adding them to
+the common query API:
+
+```go
+q := UserTable.Insert().
+	Values(UserTable.ID.Value(1), UserTable.Name.Value("Alice")).
+	OnConflict(UserTable.ID).
+	DoUpdate(postgres.Excluded(UserTable.Name))
+
+stmt, err := q.Build()
+```
+
 After an adapter scans values in projection order, result access preserves the
 column's generated type:
 

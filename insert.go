@@ -5,33 +5,45 @@ import (
 	"strings"
 )
 
-// InsertQuery builds a type-safe single-row or bulk INSERT for scope S.
-type InsertQuery[S any] struct {
+// InsertQuery builds a type-safe single-row or bulk INSERT for scope S and dialect D.
+type InsertQuery[S any, D InsertDialect] struct {
 	table      TableRef
 	rows       [][]InsertValue[S]
 	insertable map[string]bool
 	required   []string
+	uniqueKeys [][]string
+	conflict   *insertConflict[S]
+}
+
+type insertConflict[S any] struct {
+	target      []columnRef
+	doNothing   bool
+	assignments []Assignment[S]
 }
 
 // NewInsert constructs an INSERT for generated code.
-func NewInsert[S any](table TableRef, insertable, required []string) InsertQuery[S] {
+func NewInsert[S any, D InsertDialect](table TableRef, insertable, required []string, uniqueKeys [][]string) InsertQuery[S, D] {
 	allowed := make(map[string]bool, len(insertable))
 	for _, column := range insertable {
 		allowed[column] = true
 	}
-	return InsertQuery[S]{
-		table:      table,
-		insertable: allowed, required: append([]string(nil), required...),
+	keys := make([][]string, len(uniqueKeys))
+	for index, key := range uniqueKeys {
+		keys[index] = append([]string(nil), key...)
+	}
+	return InsertQuery[S, D]{
+		table: table, insertable: allowed,
+		required: append([]string(nil), required...), uniqueKeys: keys,
 	}
 }
 
 // Values appends one row to a multi-row INSERT.
-func (query InsertQuery[S]) Values(values ...InsertValue[S]) InsertQuery[S] {
+func (query InsertQuery[S, D]) Values(values ...InsertValue[S]) InsertQuery[S, D] {
 	query.rows = appendCopy(query.rows, appendCopy([]InsertValue[S](nil), values...))
 	return query
 }
 
-func (query InsertQuery[S]) Build() (Statement, error) {
+func (query InsertQuery[S, D]) Build() (Statement, error) {
 	renderer, err := rendererFor(query.table)
 	if err != nil {
 		return Statement{}, err
@@ -71,6 +83,9 @@ func (query InsertQuery[S]) Build() (Statement, error) {
 			}
 		}
 	}
+	if err := query.validateConflict(); err != nil {
+		return Statement{}, err
+	}
 
 	var builder strings.Builder
 	builder.WriteString("INSERT INTO ")
@@ -99,11 +114,137 @@ func (query InsertQuery[S]) Build() (Statement, error) {
 		builder.WriteString(strings.Join(placeholders, ", "))
 		builder.WriteByte(')')
 	}
+	query.renderConflict(renderer, &builder, &args, &nextArg)
 	return newStatement(builder.String(), args, nil), nil
 }
 
+func (query InsertQuery[S, D]) renderConflict(renderer sqlRenderer, builder *strings.Builder, args *[]any, nextArg *int) {
+	if query.conflict == nil {
+		return
+	}
+	builder.WriteString(" ON CONFLICT")
+	if len(query.conflict.target) > 0 {
+		builder.WriteString(" (")
+		for index, column := range query.conflict.target {
+			if index > 0 {
+				builder.WriteString(", ")
+			}
+			builder.WriteString(renderer.quoteIdentifier(column.name))
+		}
+		builder.WriteByte(')')
+	}
+	if query.conflict.doNothing {
+		builder.WriteString(" DO NOTHING")
+		return
+	}
+	builder.WriteString(" DO UPDATE SET ")
+	for index, assignment := range query.conflict.assignments {
+		if index > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString(renderer.quoteIdentifier(assignment.column.name))
+		builder.WriteString(" = ")
+		if assignment.excluded {
+			builder.WriteString("EXCLUDED.")
+			builder.WriteString(renderer.quoteIdentifier(assignment.column.name))
+		} else {
+			builder.WriteString(renderer.placeholder(*nextArg))
+			*nextArg++
+			*args = append(*args, assignment.value)
+		}
+	}
+}
+
+func (query InsertQuery[S, D]) validateConflict() error {
+	if query.conflict == nil {
+		return nil
+	}
+	if len(query.conflict.target) == 0 {
+		if query.conflict.doNothing {
+			return nil
+		}
+		return fmt.Errorf("tiqq: ON CONFLICT DO UPDATE requires a conflict target")
+	}
+	seen := make(map[string]bool, len(query.conflict.target))
+	for _, column := range query.conflict.target {
+		if column.qualifier != query.table.qualifier() {
+			return fmt.Errorf("tiqq: ON CONFLICT column %s is not in query scope", column.id)
+		}
+		if seen[column.name] {
+			return fmt.Errorf("tiqq: ON CONFLICT column %s is specified more than once", column.id)
+		}
+		seen[column.name] = true
+	}
+	matched := false
+	for _, key := range query.uniqueKeys {
+		keyColumns := make(map[string]bool, len(key))
+		for _, column := range key {
+			keyColumns[column] = true
+		}
+		matched = matched || len(keyColumns) == len(seen) && sameColumnSet(keyColumns, seen)
+	}
+	if !matched {
+		return fmt.Errorf("tiqq: ON CONFLICT target does not match a primary key or unique constraint")
+	}
+	if !query.conflict.doNothing && len(query.conflict.assignments) == 0 {
+		return fmt.Errorf("tiqq: ON CONFLICT DO UPDATE requires at least one assignment")
+	}
+	assigned := make(map[string]bool, len(query.conflict.assignments))
+	for _, assignment := range query.conflict.assignments {
+		if assignment.column.qualifier != query.table.qualifier() {
+			return fmt.Errorf("tiqq: ON CONFLICT assignment column %s is not in query scope", assignment.column.id)
+		}
+		if !query.insertable[assignment.column.name] {
+			return fmt.Errorf("tiqq: column %s is not insertable", assignment.column.id)
+		}
+		if assigned[assignment.column.name] {
+			return fmt.Errorf("tiqq: ON CONFLICT assignment column %s is specified more than once", assignment.column.id)
+		}
+		assigned[assignment.column.name] = true
+	}
+	return nil
+}
+
+func sameColumnSet(left, right map[string]bool) bool {
+	for column := range left {
+		if !right[column] {
+			return false
+		}
+	}
+	return true
+}
+
+// WithConflictDoNothing is intended for dialect packages.
+func WithConflictDoNothing[S any, D InsertDialect](query InsertQuery[S, D], columns ...ConflictColumn[S]) InsertQuery[S, D] {
+	query.conflict = &insertConflict[S]{target: conflictColumns(columns), doNothing: true}
+	return query
+}
+
+// WithConflictDoUpdate is intended for dialect packages.
+func WithConflictDoUpdate[S any, D InsertDialect](query InsertQuery[S, D], columns []ConflictColumn[S], values ...UpdateValue[S]) InsertQuery[S, D] {
+	assignments := make([]Assignment[S], len(values))
+	for index, value := range values {
+		assignments[index] = value.updateValue(*new(S))
+	}
+	query.conflict = &insertConflict[S]{target: conflictColumns(columns), assignments: assignments}
+	return query
+}
+
+func conflictColumns[S any](columns []ConflictColumn[S]) []columnRef {
+	result := make([]columnRef, len(columns))
+	for index, column := range columns {
+		result[index] = column.conflictColumn(*new(S))
+	}
+	return result
+}
+
+// ExcludedAssignment creates a PostgreSQL incoming-row assignment for dialect packages.
+func ExcludedAssignment[S any](column ConflictColumn[S]) Assignment[S] {
+	return Assignment[S]{column: column.conflictColumn(*new(S)), excluded: true}
+}
+
 // MustBuild builds an INSERT statement and panics if validation fails.
-func (query InsertQuery[S]) MustBuild() Statement {
+func (query InsertQuery[S, D]) MustBuild() Statement {
 	statement, err := query.Build()
 	if err != nil {
 		panic(err)

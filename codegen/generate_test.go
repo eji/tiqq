@@ -46,8 +46,8 @@ func TestGenerate(t *testing.T) {
 	require.Contains(t, source, "func (table UserTableDef) InnerJoin[C, NC any, R tiqq.TableLike[C, NC]]")
 	require.Contains(t, source, "func (table UserTableDef) LeftJoin[C, NC any, R tiqq.TableLike[C, NC]]")
 	require.Contains(t, source, "func (table UserTableDef) Update() tiqq.UpdateQuery[UserScope]")
-	require.Contains(t, source, "func (table UserTableDef) Insert() tiqq.InsertQuery[UserScope]")
-	require.Contains(t, source, `tiqq.NewInsert[UserScope](table.ref, []string{"id", "display_name", "balance"}, []string{"id", "display_name", "balance"})`)
+	require.Contains(t, source, "func (table UserTableDef) Insert() postgres.InsertQuery[UserScope]")
+	require.Contains(t, source, `tiqq.NewInsert[UserScope, tiqq.PostgreSQLMarker](table.ref, []string{"id", "display_name", "balance"}, []string{"id", "display_name", "balance"}, [][]string(nil))`)
 	require.Contains(t, source, `Columns: []string{"user_id"}, ReferencedTable: "users", ReferencedColumns: []string{"id"}`)
 }
 
@@ -154,7 +154,7 @@ func TestGenerateInsertMetadata(t *testing.T) {
 	source := string(generated)
 
 	require.NoError(t, err)
-	require.Contains(t, source, `tiqq.NewInsert[UserScope](table.ref, []string{"name", "nickname", "created_at"}, []string{"name"})`)
+	require.Contains(t, source, `tiqq.NewInsert[UserScope, tiqq.PostgreSQLMarker](table.ref, []string{"name", "nickname", "created_at"}, []string{"name"}, [][]string(nil))`)
 }
 
 func stringPointer(value string) *string { return &value }
@@ -196,4 +196,21 @@ func TestGeneratePostgresAggregateTypes(t *testing.T) {
 			require.Contains(t, string(generated), test.want)
 		})
 	}
+}
+
+func TestGeneratePostgresConflictKeys(t *testing.T) {
+	database := schema.Schema{Dialect: schema.PostgreSQL, Tables: []schema.Table{{
+		Name: "users",
+		Columns: []schema.Column{
+			{Name: "id", DBType: "int8"},
+			{Name: "email", DBType: "text"},
+		},
+		PrimaryKey: &schema.Key{Name: "users_pkey", Columns: []string{"id"}},
+		UniqueKeys: []schema.Key{{Name: "users_email_key", Columns: []string{"email"}}},
+	}}}
+
+	generated, err := codegen.Generate(database, codegen.Config{Package: "dbschema"})
+
+	require.NoError(t, err)
+	require.Contains(t, string(generated), `[][]string{[]string{"id"}, []string{"email"}}`)
 }

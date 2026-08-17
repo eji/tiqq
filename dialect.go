@@ -24,6 +24,14 @@ const (
 	PostgreSQL builtinDialect = iota + 1
 )
 
+// InsertDialect is the closed set of dialect markers for generated INSERT builders.
+type InsertDialect interface{ insertDialect() }
+
+// PostgreSQLMarker ties generated query types to PostgreSQL-only APIs.
+type PostgreSQLMarker struct{}
+
+func (PostgreSQLMarker) insertDialect() {}
+
 func (dialect builtinDialect) dialectRenderer() sqlRenderer {
 	switch dialect {
 	case PostgreSQL:

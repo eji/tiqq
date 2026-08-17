@@ -37,6 +37,11 @@
                   return 1
                   ;;
               esac
+
+              hook_path="$(git rev-parse --git-path hooks/pre-commit 2>/dev/null || true)"
+              if [ -n "$hook_path" ] && [ ! -e "$hook_path" ]; then
+                pre-commit install
+              fi
             '';
           };
         });

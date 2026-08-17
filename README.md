@@ -59,11 +59,11 @@ Generated tables retain the SQL dialect of their introspected schema. `Build`
 uses that metadata for identifier quoting, placeholders, and feature validation;
 callers do not pass a dialect or override the schema's source database.
 
-PostgreSQL and MySQL schema IR generate dialect-specific table metadata and
-insert builders. MySQL rendering uses backtick-quoted identifiers and `?`
-placeholders.
+PostgreSQL, MySQL, and SQLite schema IR generate dialect-specific table
+metadata and insert builders. MySQL rendering uses backtick-quoted identifiers;
+SQLite uses double-quoted identifiers. Both use `?` placeholders.
 
-Generate directly from a PostgreSQL or MySQL database:
+Generate directly from a PostgreSQL, MySQL, or SQLite database:
 
 ```sh
 DATABASE_URL='postgres://user:pass@localhost/app' \
@@ -71,10 +71,14 @@ DATABASE_URL='postgres://user:pass@localhost/app' \
 
 MYSQL_DATABASE_URL='user:pass@tcp(localhost:3306)/app' \
   go run ./cmd/tiqq-gen mysql -database app -package schema -output schema_gen.go
+
+go run ./cmd/tiqq-gen sqlite -database app.db -package schema -output schema_gen.go
 ```
 
-The database driver is used only by the generator CLI; query execution remains
-the application's responsibility.
+The PostgreSQL, MySQL, and CGO-free SQLite drivers are used only by the
+generator CLI; query execution remains the application's responsibility.
+SQLite columns with NUMERIC affinity generate `tiqq.Decimal`; they are never
+silently reduced to `float64` by tiqq.
 
 For a statically defined query that should fail fast during development, use
 `q.MustBuild()`; it panics with the same validation error.

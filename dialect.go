@@ -24,6 +24,8 @@ const (
 	PostgreSQL builtinDialect = iota + 1
 	// MySQL selects MySQL SQL syntax and placeholders.
 	MySQL
+	// SQLite selects SQLite SQL syntax and placeholders.
+	SQLite
 )
 
 // InsertDialect is the closed set of dialect markers for generated INSERT builders.
@@ -39,12 +41,19 @@ type MySQLMarker struct{}
 
 func (MySQLMarker) insertDialect() {}
 
+// SQLiteMarker ties generated query types to SQLite-only APIs.
+type SQLiteMarker struct{}
+
+func (SQLiteMarker) insertDialect() {}
+
 func (dialect builtinDialect) dialectRenderer() sqlRenderer {
 	switch dialect {
 	case PostgreSQL:
 		return postgresRenderer{}
 	case MySQL:
 		return mysqlRenderer{}
+	case SQLite:
+		return sqliteRenderer{}
 	default:
 		panic("tiqq: unknown SQL dialect")
 	}
@@ -65,6 +74,14 @@ func (mysqlRenderer) quoteIdentifier(value string) string {
 	return "`" + strings.ReplaceAll(value, "`", "``") + "`"
 }
 func (mysqlRenderer) placeholder(int) string { return "?" }
+
+type sqliteRenderer struct{}
+
+func (sqliteRenderer) name() string { return "sqlite" }
+func (sqliteRenderer) quoteIdentifier(value string) string {
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
+}
+func (sqliteRenderer) placeholder(int) string { return "?" }
 
 // SchemaInfo carries code-generation source metadata shared by generated tables.
 type SchemaInfo struct{ dialect Dialect }

@@ -42,6 +42,16 @@ func TestDialectRenderer(t *testing.T) {
 			render:  func(renderer sqlRenderer) string { return renderer.placeholder(3) },
 			want:    "?",
 		},
+		"sqlite identifier": {
+			dialect: SQLite,
+			render:  func(renderer sqlRenderer) string { return renderer.quoteIdentifier(`a"b`) },
+			want:    `"a""b"`,
+		},
+		"sqlite placeholder": {
+			dialect: SQLite,
+			render:  func(renderer sqlRenderer) string { return renderer.placeholder(3) },
+			want:    "?",
+		},
 	}
 
 	for name, test := range tests {

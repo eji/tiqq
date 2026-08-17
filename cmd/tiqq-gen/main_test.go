@@ -204,6 +204,98 @@ func TestDefaultPostgresOpenDoesNotExposeInvalidDSN(t *testing.T) {
 	require.NotContains(t, err.Error(), secret)
 }
 
+func TestRunSQLiteCLI(t *testing.T) {
+	database, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = database.Close() })
+	mock.ExpectPing()
+	var output bytes.Buffer
+	wantSchema := schema.Schema{Dialect: schema.SQLite, Name: "main"}
+	dependencies := sqliteDependencies{
+		open: func(path string) (*sql.DB, error) {
+			require.Equal(t, "app.db", path)
+			return database, nil
+		},
+		introspect: func(ctx context.Context, gotDatabase *sql.DB) (schema.Schema, error) {
+			require.Same(t, database, gotDatabase)
+			return wantSchema, nil
+		},
+		generate: func(gotSchema schema.Schema, config codegen.Config) ([]byte, error) {
+			require.Equal(t, wantSchema, gotSchema)
+			require.Equal(t, "dbschema", config.Package)
+			return []byte("generated"), nil
+		},
+		write:  writeGenerated,
+		stdout: &output,
+	}
+
+	err = runSQLiteCLI([]string{
+		"-database", "app.db",
+		"-package", "dbschema",
+		"-output", "-",
+	}, dependencies)
+
+	require.NoError(t, err)
+	require.Equal(t, "generated", output.String())
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRunSQLiteCLIValidation(t *testing.T) {
+	tests := map[string]struct {
+		arguments []string
+		want      string
+	}{
+		"database is required": {
+			want: "SQLite database path is required",
+		},
+		"invalid duration is rejected": {
+			arguments: []string{"-timeout", "invalid"},
+			want:      "invalid value \"invalid\" for flag -timeout",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := runSQLiteCLI(test.arguments, sqliteDependencies{})
+			require.ErrorContains(t, err, test.want)
+		})
+	}
+}
+
+func TestSQLiteCLIIntrospectsAndGenerates(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "app.db")
+	dependencies := defaultSQLiteDependencies()
+	database, err := dependencies.open(databasePath)
+	require.NoError(t, err)
+	_, err = database.Exec(`
+		CREATE TABLE users (
+			id INTEGER PRIMARY KEY,
+			email TEXT NOT NULL UNIQUE
+		);
+		CREATE TABLE addresses (
+			id INTEGER PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES users(id),
+			address TEXT,
+			normalized TEXT GENERATED ALWAYS AS (lower(address)) STORED
+		);`)
+	require.NoError(t, err)
+	require.NoError(t, database.Close())
+	var output bytes.Buffer
+	dependencies.stdout = &output
+
+	err = runSQLiteCLI([]string{
+		"-database", databasePath,
+		"-package", "dbschema",
+		"-output", "-",
+	}, dependencies)
+
+	require.NoError(t, err)
+	require.Contains(t, output.String(), "package dbschema")
+	require.Contains(t, output.String(), "var tiqqSchema = tiqq.NewSchemaInfo(tiqq.SQLite)")
+	require.Contains(t, output.String(), "func (table UserTableDef) Insert() sqlite.InsertQuery[UserScope]")
+	require.Contains(t, output.String(), `ReferencedTable: "users"`)
+}
+
 func TestWriteGeneratedAtomicallyReplacesOutput(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "schema_gen.go")
 	require.NoError(t, os.WriteFile(output, []byte("old"), 0o600))

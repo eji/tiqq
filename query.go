@@ -176,6 +176,10 @@ type Query struct {
 	projections []columnRef
 	groupBy     []columnRef
 	having      []Predicate
+	distinct    bool
+	orderBy     []Order
+	limit       *int64
+	offset      *int64
 }
 
 func (query Query) GroupBy(columns ...Selection) Query {
@@ -201,6 +205,30 @@ func (query Query) Select(columns ...Selection) Query {
 	for index, column := range columns {
 		query.projections[index] = column.selection()
 	}
+	return query
+}
+
+// Distinct removes duplicate result rows.
+func (query Query) Distinct() Query {
+	query.distinct = true
+	return query
+}
+
+// OrderBy replaces the query's result ordering.
+func (query Query) OrderBy(orders ...Order) Query {
+	query.orderBy = append([]Order(nil), orders...)
+	return query
+}
+
+// Limit restricts the maximum number of returned rows.
+func (query Query) Limit(limit int64) Query {
+	query.limit = &limit
+	return query
+}
+
+// Offset skips rows before returning the result. MySQL and SQLite require Limit.
+func (query Query) Offset(offset int64) Query {
+	query.offset = &offset
 	return query
 }
 
@@ -234,17 +262,47 @@ func (query Query) Build() (Statement, error) {
 	if err := validateColumns("GROUP BY", query.groupBy, allowed); err != nil {
 		return Statement{}, err
 	}
+	orderColumns := make([]columnRef, len(query.orderBy))
+	for index, order := range query.orderBy {
+		orderColumns[index] = order.column
+	}
+	if err := validateColumns("ORDER BY", orderColumns, allowed); err != nil {
+		return Statement{}, err
+	}
 	for _, predicate := range query.having {
 		if err := validateColumns("HAVING", predicateColumns(predicate), allowed); err != nil {
 			return Statement{}, err
 		}
 	}
-	if err := validateGrouping(query.projections, query.groupBy, query.having); err != nil {
+	if err := validateGrouping(query.projections, query.groupBy, query.having, orderColumns); err != nil {
 		return Statement{}, err
+	}
+	if query.distinct {
+		selected := make(map[string]bool, len(query.projections))
+		for _, projection := range query.projections {
+			selected[projection.id] = true
+		}
+		for _, column := range orderColumns {
+			if !selected[column.id] {
+				return Statement{}, fmt.Errorf("tiqq: DISTINCT ORDER BY column %s must appear in SELECT", column.id)
+			}
+		}
+	}
+	if query.limit != nil && *query.limit < 0 {
+		return Statement{}, fmt.Errorf("tiqq: LIMIT must not be negative")
+	}
+	if query.offset != nil && *query.offset < 0 {
+		return Statement{}, fmt.Errorf("tiqq: OFFSET must not be negative")
+	}
+	if query.offset != nil && query.limit == nil && renderer.name() != "postgresql" {
+		return Statement{}, fmt.Errorf("tiqq: %s OFFSET requires LIMIT", renderer.name())
 	}
 
 	var builder strings.Builder
 	builder.WriteString("SELECT ")
+	if query.distinct {
+		builder.WriteString("DISTINCT ")
+	}
 	for index, column := range query.projections {
 		if index > 0 {
 			builder.WriteString(", ")
@@ -322,6 +380,28 @@ func (query Query) Build() (Statement, error) {
 			args = append(args, values...)
 		}
 	}
+	if len(query.orderBy) > 0 {
+		builder.WriteString(" ORDER BY ")
+		for index, order := range query.orderBy {
+			if index > 0 {
+				builder.WriteString(", ")
+			}
+			builder.WriteString(renderColumn(renderer, order.column))
+			builder.WriteByte(' ')
+			builder.WriteString(order.direction)
+		}
+	}
+	if query.limit != nil {
+		builder.WriteString(" LIMIT ")
+		builder.WriteString(renderer.placeholder(nextArg))
+		nextArg++
+		args = append(args, *query.limit)
+	}
+	if query.offset != nil {
+		builder.WriteString(" OFFSET ")
+		builder.WriteString(renderer.placeholder(nextArg))
+		args = append(args, *query.offset)
+	}
 	return newStatement(builder.String(), args, query.projections), nil
 }
 
@@ -334,7 +414,7 @@ func validateNoAggregates(clause string, columns []columnRef) error {
 	return nil
 }
 
-func validateGrouping(projections, groupBy []columnRef, having []Predicate) error {
+func validateGrouping(projections, groupBy []columnRef, having []Predicate, orderBy []columnRef) error {
 	grouped := make(map[string]bool, len(groupBy))
 	for _, column := range groupBy {
 		if column.aggregate {
@@ -351,6 +431,9 @@ func validateGrouping(projections, groupBy []columnRef, having []Predicate) erro
 			hasAggregate = hasAggregate || column.aggregate
 		}
 	}
+	for _, column := range orderBy {
+		hasAggregate = hasAggregate || column.aggregate
+	}
 	if !hasAggregate && len(groupBy) == 0 {
 		return nil
 	}
@@ -364,6 +447,11 @@ func validateGrouping(projections, groupBy []columnRef, having []Predicate) erro
 			if !column.aggregate && !grouped[column.id] {
 				return fmt.Errorf("tiqq: HAVING column %s must appear in GROUP BY", column.id)
 			}
+		}
+	}
+	for _, column := range orderBy {
+		if !column.aggregate && !grouped[column.id] {
+			return fmt.Errorf("tiqq: ORDER BY column %s must appear in GROUP BY", column.id)
 		}
 	}
 	return nil

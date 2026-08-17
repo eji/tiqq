@@ -72,23 +72,8 @@ This prototype intentionally requires Go 1.27 generic methods. At the time of
 writing, Go 1.27 is not yet generally released, so use a Go 1.27 prerelease
 toolchain. Execution remains owned by `database/sql`, pgx, or another adapter.
 
-The database-derived IR is in `schema`, and `introspect/postgres` fills it from
-`information_schema` without choosing a SQL driver. The sample generated API is
-in `example/schema`. `tiqq-gen` generates typed tables and unambiguous FK-based
-inner/left joins from Schema IR JSON:
-
-```sh
-go run ./cmd/tiqq-gen \
-  -schema schema.json \
-  -package dbschema \
-  -output internal/dbschema/schema_gen.go
-```
-
-Multiple relations from the same parent require an explicit relation API and
-are currently rejected instead of producing ambiguous Go methods.
-
-To introspect PostgreSQL and generate Go directly, keep the DSN in an
-environment variable and use the `postgres` subcommand:
+To generate typed Go directly from the live PostgreSQL schema, keep the DSN in
+an environment variable and use the `postgres` subcommand:
 
 ```sh
 export DATABASE_URL='postgres://user:password@localhost:5432/app'
@@ -104,6 +89,14 @@ The command verifies the connection, reads the live PostgreSQL catalog,
 generates formatted Go, and atomically replaces the output file. A failed
 connection, introspection, or generation leaves an existing output untouched.
 Use `-output -` to write generated code to stdout.
+
+Internally, `introspect/postgres` converts `information_schema` into the Schema
+IR in `schema`, which `codegen` then consumes. This intermediate representation
+is an implementation boundary, not a required user-managed artifact.
+
+The generator emits typed tables and unambiguous FK-based inner/left joins.
+Multiple relations from the same parent require an explicit relation API and
+are currently rejected instead of producing ambiguous Go methods.
 
 It can also be used with `go generate` without putting credentials in source or
 process arguments:

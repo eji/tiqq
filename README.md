@@ -105,6 +105,15 @@ q = q.Where(UserTable.ID.Eq(input.ID))
 stmt, err := q.Build()
 ```
 
+Deletes require a predicate unless all rows are explicitly acknowledged:
+
+```go
+q := UserTable.Delete().Where(UserTable.ID.Eq(id))
+stmt, err := q.Build()
+
+all := AuditLogTable.Delete().AllRows()
+```
+
 Inserts use the same typed column/value pairing and can append rows for a bulk
 insert:
 

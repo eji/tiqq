@@ -148,7 +148,9 @@ query := joined.Where(
 ```
 
 Available primitives include `And`, `Or`, `Not`, `In`, `NotIn`, `IsNull`, and
-`IsNotNull` in addition to typed value and column comparisons.
+`IsNotNull` in addition to typed value and column comparisons. Column-to-column
+comparisons use `Eq`, `Ne`, `Lt`, `Lte`, `Gt`, and `Gte`; `Ne` emits the
+standard SQL `<>` operator.
 
 Go rejects a recursively growing generic method result as an instantiation
 cycle, so subsequent joins use the same top-level constructor that generated

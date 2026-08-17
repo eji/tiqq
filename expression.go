@@ -35,8 +35,33 @@ func comparison(column columnRef, op string, value any) Predicate {
 
 // Eq compares two columns with the same comparison type.
 func Eq[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+	return compareColumns(left, "=", right)
+}
+
+// Ne compares two columns for inequality using the standard SQL <> operator.
+func Ne[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+	return compareColumns(left, "<>", right)
+}
+
+func Lt[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+	return compareColumns(left, "<", right)
+}
+
+func Lte[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+	return compareColumns(left, "<=", right)
+}
+
+func Gt[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+	return compareColumns(left, ">", right)
+}
+
+func Gte[LS, LV, RS, RV, T any](left Column[LS, LV, T], right Column[RS, RV, T]) Predicate {
+	return compareColumns(left, ">=", right)
+}
+
+func compareColumns[LS, LV, RS, RV, T any](left Column[LS, LV, T], operator string, right Column[RS, RV, T]) Predicate {
 	return Predicate{node: predicateNode{
-		kind: columnComparison, left: left.ref, op: "=", rightColumn: right.ref,
+		kind: columnComparison, left: left.ref, op: operator, rightColumn: right.ref,
 	}}
 }
 

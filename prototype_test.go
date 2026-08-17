@@ -321,6 +321,28 @@ func TestPredicateExpressions(t *testing.T) {
 	}
 }
 
+func TestColumnComparisonOperators(t *testing.T) {
+	tests := map[string]struct {
+		predicate tiqq.Predicate
+		wantSQL   string
+	}{
+		"equal":            {predicate: tiqq.Eq(UserTable.ID, AddressTable.UserID), wantSQL: `"users"."id" = "addresses"."user_id"`},
+		"not equal":        {predicate: tiqq.Ne(UserTable.ID, AddressTable.UserID), wantSQL: `"users"."id" <> "addresses"."user_id"`},
+		"less than":        {predicate: tiqq.Lt(UserTable.ID, AddressTable.UserID), wantSQL: `"users"."id" < "addresses"."user_id"`},
+		"less or equal":    {predicate: tiqq.Lte(UserTable.ID, AddressTable.UserID), wantSQL: `"users"."id" <= "addresses"."user_id"`},
+		"greater than":     {predicate: tiqq.Gt(UserTable.ID, AddressTable.UserID), wantSQL: `"users"."id" > "addresses"."user_id"`},
+		"greater or equal": {predicate: tiqq.Gte(UserTable.ID, AddressTable.UserID), wantSQL: `"users"."id" >= "addresses"."user_id"`},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			joined := UserTable.LeftJoin(AddressTable).On(test.predicate)
+			stmt := joined.Select(joined.Left().ID).Build()
+			require.Contains(t, stmt.SQL(), " ON "+test.wantSQL)
+		})
+	}
+}
+
 func TestPredicateExpressionsInOn(t *testing.T) {
 	j := UserTable.LeftJoin(AuditLogTable).On(
 		tiqq.Eq(UserTable.ID, AuditLogTable.ActorID),

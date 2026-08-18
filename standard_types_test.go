@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json/jsontext"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/eji/tiqq"
@@ -21,6 +22,19 @@ type standardTypeColumns struct {
 }
 
 type nullableStandardTypeColumns = standardTypeColumns
+
+type timeTypeColumns struct {
+	CreatedAt tiqq.Column[standardTypeScope, time.Time, time.Time]
+}
+
+type timeTypeTable struct {
+	ref     tiqq.TableRef
+	columns timeTypeColumns
+}
+
+func (table timeTypeTable) TiqqTableInfo() tiqq.TableInfo[timeTypeColumns, timeTypeColumns] {
+	return tiqq.NewTableInfo(table.ref, table.columns, table.columns, nil)
+}
 
 type standardTypeTable struct {
 	ref     tiqq.TableRef
@@ -207,4 +221,33 @@ func TestStandardTypesRoundTripThroughDatabaseSQL(t *testing.T) {
 	require.NoError(t, payloadErr)
 	require.Equal(t, id, gotID)
 	require.Equal(t, payload, gotPayload)
+}
+
+func TestTimeTypeRoundTripThroughDatabaseSQL(t *testing.T) {
+	database, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = database.Close() })
+	_, err = database.Exec(`CREATE TABLE events (created_at DATETIME NOT NULL)`)
+	require.NoError(t, err)
+
+	table := timeTypeTable{
+		ref: tiqq.NewSchemaInfo(tiqq.SQLite).Table("events"),
+		columns: timeTypeColumns{
+			CreatedAt: tiqq.RequiredColumn[standardTypeScope, time.Time]("events", "created_at"),
+		},
+	}
+	want := time.Date(2026, time.August, 18, 12, 34, 56, 123456000, time.UTC)
+	insert := tiqq.NewInsert[standardTypeScope, tiqq.SQLiteMarker](
+		table.ref, []string{"created_at"}, []string{"created_at"}, nil,
+	).Values(table.columns.CreatedAt.Value(want)).MustBuild()
+	_, err = database.Exec(insert.SQL(), insert.Args()...)
+	require.NoError(t, err)
+
+	statement := tiqq.NewTableQuery(table).Select(table.columns.CreatedAt).MustBuild()
+	row, err := tiqq.ScanRow(database.QueryRow(statement.SQL()), statement)
+	got, getErr := row.Get(table.columns.CreatedAt)
+
+	require.NoError(t, err)
+	require.NoError(t, getErr)
+	require.Equal(t, want, got)
 }

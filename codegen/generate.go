@@ -49,6 +49,9 @@ func Generate(database schema.Schema, config Config) ([]byte, error) {
 	if schemaUsesType(tables, dialect, "uuid.UUID") {
 		output.WriteString("\t\"uuid\"\n")
 	}
+	if schemaUsesType(tables, dialect, "time.Time") {
+		output.WriteString("\t\"time\"\n")
+	}
 	fmt.Fprintf(&output, "\n\t\"github.com/eji/tiqq\"\n\t\"github.com/eji/tiqq/%s\"\n)\n\n", dialectPackage)
 	fmt.Fprintf(&output, "var tiqqSchema = tiqq.NewSchemaInfo(tiqq.%s)\n\n", dialectName)
 	for _, table := range tables {
@@ -216,7 +219,7 @@ func columnType(dialect schema.Dialect, scope string, column schema.Column, oute
 }
 
 func numericAggregateTypes(dialect schema.Dialect, databaseType string) (string, string, bool) {
-	if isUUIDType(dialect, databaseType) || isJSONType(databaseType) {
+	if isUUIDType(dialect, databaseType) || isJSONType(databaseType) || isTimeType(dialect, databaseType) {
 		return "", "", false
 	}
 	if dialect == schema.SQLite {
@@ -262,6 +265,9 @@ func goType(dialect schema.Dialect, column schema.Column) string {
 	}
 	if isJSONType(databaseType) {
 		return "jsontext.Value"
+	}
+	if isTimeType(dialect, databaseType) {
+		return "time.Time"
 	}
 	if dialect == schema.SQLite {
 		switch sqliteAffinity(databaseType) {
@@ -342,6 +348,20 @@ func isUUIDType(dialect schema.Dialect, databaseType string) bool {
 func isJSONType(databaseType string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(databaseType))
 	return normalized == "json" || normalized == "jsonb"
+}
+
+func isTimeType(dialect schema.Dialect, databaseType string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(databaseType))
+	switch dialect {
+	case schema.PostgreSQL:
+		return normalized == "date" || normalized == "timestamp" || normalized == "timestamptz"
+	case schema.MySQL:
+		return normalized == "date" || normalized == "datetime" || normalized == "timestamp"
+	case schema.SQLite:
+		return normalized == "date" || normalized == "datetime" || normalized == "timestamp"
+	default:
+		return false
+	}
 }
 
 func sqliteAffinity(databaseType string) string {

@@ -335,3 +335,69 @@ func TestGenerateStandardUUIDAndJSONTypes(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateStandardTimeTypes(t *testing.T) {
+	tests := map[string]struct {
+		dialect   schema.Dialect
+		columns   []schema.Column
+		wantTypes []string
+	}{
+		"postgres": {
+			dialect: schema.PostgreSQL,
+			columns: []schema.Column{
+				{Name: "created_at", DBType: "timestamptz"},
+				{Name: "published_on", DBType: "date", Nullable: true},
+				{Name: "local_time", DBType: "time"},
+			},
+			wantTypes: []string{
+				`"time"`,
+				"tiqq.Column[EventScope, time.Time, time.Time]",
+				"tiqq.Column[EventScope, sql.Null[time.Time], time.Time]",
+				"tiqq.Column[EventScope, string, string]",
+			},
+		},
+		"mysql": {
+			dialect: schema.MySQL,
+			columns: []schema.Column{
+				{Name: "created_at", DBType: "datetime"},
+				{Name: "published_on", DBType: "date", Nullable: true},
+				{Name: "local_time", DBType: "time"},
+			},
+			wantTypes: []string{
+				`"time"`,
+				"tiqq.Column[EventScope, time.Time, time.Time]",
+				"tiqq.Column[EventScope, sql.Null[time.Time], time.Time]",
+				"tiqq.Column[EventScope, string, string]",
+			},
+		},
+		"sqlite declared types": {
+			dialect: schema.SQLite,
+			columns: []schema.Column{
+				{Name: "created_at", DBType: "datetime"},
+				{Name: "published_on", DBType: "date", Nullable: true},
+				{Name: "local_time", DBType: "time"},
+			},
+			wantTypes: []string{
+				`"time"`,
+				"tiqq.Column[EventScope, time.Time, time.Time]",
+				"tiqq.Column[EventScope, sql.Null[time.Time], time.Time]",
+				"tiqq.NumericColumn[EventScope, tiqq.Decimal, tiqq.Decimal, tiqq.Decimal, tiqq.Decimal]",
+			},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			generated, err := codegen.Generate(schema.Schema{
+				Dialect: test.dialect,
+				Tables:  []schema.Table{{Name: "events", Columns: test.columns}},
+			}, codegen.Config{Package: "dbschema"})
+			source := string(generated)
+
+			require.NoError(t, err)
+			for _, want := range test.wantTypes {
+				require.Contains(t, source, want)
+			}
+		})
+	}
+}

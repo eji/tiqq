@@ -98,11 +98,19 @@ PostgreSQL uuid       -> uuid.UUID
 PostgreSQL json/jsonb -> jsontext.Value
 MySQL json            -> jsontext.Value
 SQLite UUID/JSON      -> uuid.UUID / jsontext.Value
+PostgreSQL date/timestamp/timestamptz -> time.Time
+MySQL date/datetime/timestamp          -> time.Time
+SQLite DATE/DATETIME/TIMESTAMP         -> time.Time
 ```
 
 `Statement.Args` converts these values to driver-safe text or bytes, and
 `ScanRow` accepts the string, byte, and 16-byte UUID representations returned
 by database/sql and pgx drivers.
+
+MySQL applications must use `parseTime=true` in the execution DSN to scan
+DATE, DATETIME, and TIMESTAMP columns as `time.Time`. PostgreSQL/MySQL `TIME`
+and PostgreSQL `timetz`/`interval` remain strings because they represent a time
+of day or a duration rather than an instant.
 
 For a statically defined query that should fail fast during development, use
 `q.MustBuild()`; it panics with the same validation error.

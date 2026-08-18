@@ -14,6 +14,8 @@ type InsertQuery[S any, D InsertDialect] struct {
 	uniqueKeys [][]string
 	conflict   *insertConflict[S]
 	duplicate  []Assignment[S]
+	returning  []columnRef
+	returns    bool
 }
 
 type insertConflict[S any] struct {
@@ -44,6 +46,13 @@ func (query InsertQuery[S, D]) Values(values ...InsertValue[S]) InsertQuery[S, D
 	return query
 }
 
+// Returning selects values produced by the inserted rows.
+func (query InsertQuery[S, D]) Returning(columns ...Selection) InsertQuery[S, D] {
+	query.returns = true
+	query.returning = selections(columns)
+	return query
+}
+
 func (query InsertQuery[S, D]) Build() (Statement, error) {
 	renderer, err := rendererFor(query.table)
 	if err != nil {
@@ -51,6 +60,9 @@ func (query InsertQuery[S, D]) Build() (Statement, error) {
 	}
 	if len(query.rows) == 0 || len(query.rows[0]) == 0 {
 		return Statement{}, fmt.Errorf("tiqq: INSERT requires at least one value")
+	}
+	if err := validateReturning(renderer, query.table, query.returning, query.returns); err != nil {
+		return Statement{}, err
 	}
 	firstColumns := make([]string, len(query.rows[0]))
 	firstColumnSet := make(map[string]bool, len(firstColumns))
@@ -144,7 +156,8 @@ func (query InsertQuery[S, D]) Build() (Statement, error) {
 	}
 	query.renderConflict(renderer, &builder, &args, &nextArg)
 	query.renderDuplicateKey(renderer, &builder, &args, &nextArg)
-	return newStatement(builder.String(), args, nil), nil
+	renderReturning(renderer, &builder, query.returning)
+	return newStatement(builder.String(), args, query.returning), nil
 }
 
 func (query InsertQuery[S, D]) renderDuplicateKey(renderer sqlRenderer, builder *strings.Builder, args *[]any, nextArg *int) {

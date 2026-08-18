@@ -11,6 +11,8 @@ type UpdateQuery[S any] struct {
 	assignments []Assignment[S]
 	predicates  []Predicate
 	allRows     bool
+	returning   []columnRef
+	returns     bool
 }
 
 // NewUpdate constructs an UPDATE for a generated table.
@@ -35,6 +37,13 @@ func (query UpdateQuery[S]) AllRows() UpdateQuery[S] {
 	return query
 }
 
+// Returning selects values produced by the updated rows.
+func (query UpdateQuery[S]) Returning(columns ...Selection) UpdateQuery[S] {
+	query.returns = true
+	query.returning = selections(columns)
+	return query
+}
+
 func (query UpdateQuery[S]) Build() (Statement, error) {
 	renderer, err := rendererFor(query.table.ref)
 	if err != nil {
@@ -45,6 +54,9 @@ func (query UpdateQuery[S]) Build() (Statement, error) {
 	}
 	if len(query.predicates) == 0 && !query.allRows {
 		return Statement{}, fmt.Errorf("tiqq: UPDATE requires WHERE or AllRows")
+	}
+	if err := validateReturning(renderer, query.table.ref, query.returning, query.returns); err != nil {
+		return Statement{}, err
 	}
 	allowed := map[string]bool{query.table.ref.qualifier(): true}
 	columns := make([]columnRef, len(query.assignments))
@@ -101,7 +113,8 @@ func (query UpdateQuery[S]) Build() (Statement, error) {
 			args = append(args, values...)
 		}
 	}
-	return newStatement(builder.String(), args, nil), nil
+	renderReturning(renderer, &builder, query.returning)
+	return newStatement(builder.String(), args, query.returning), nil
 }
 
 // MustBuild builds an UPDATE statement and panics if validation fails.

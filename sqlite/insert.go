@@ -18,6 +18,11 @@ func (query InsertQuery[S]) Values(values ...tiqq.InsertValue[S]) InsertQuery[S]
 	return query
 }
 
+func (query InsertQuery[S]) Returning(columns ...tiqq.Selection) InsertQuery[S] {
+	query.query = query.query.Returning(columns...)
+	return query
+}
+
 func (query InsertQuery[S]) Build() (tiqq.Statement, error) { return query.query.Build() }
 func (query InsertQuery[S]) MustBuild() tiqq.Statement      { return query.query.MustBuild() }
 

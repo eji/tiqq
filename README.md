@@ -5,6 +5,9 @@ contains the first prototype: typed columns and predicates, explicit SELECT,
 JOIN scope rebinding, dialect-aware placeholders, projection metadata, and
 typed result access.
 
+The supported application API, generated-code contract, and beta compatibility
+policy are documented in [API.md](API.md).
+
 The prototype supports `InnerJoin`, `LeftJoin`, `RightJoin`, `FullJoin`, and
 `CrossJoin`. Outer joins make the affected branches nullable. MySQL rejects
 `FullJoin` at `Build` because the dialect does not support it.

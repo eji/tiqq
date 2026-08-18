@@ -33,10 +33,12 @@ type NumericColumn[S, V, C, Sum, Avg any] struct {
 	Column[S, V, C]
 }
 
+// RequiredNumericColumn constructs a non-nullable numeric column for generated code.
 func RequiredNumericColumn[S, C, Sum, Avg any](table, name string) NumericColumn[S, C, C, Sum, Avg] {
 	return NumericColumn[S, C, C, Sum, Avg]{Column: RequiredColumn[S, C](table, name)}
 }
 
+// NullableNumericColumn constructs a nullable numeric column for generated code.
 func NullableNumericColumn[S, C, Sum, Avg any](table, name string) NumericColumn[S, sql.Null[C], C, Sum, Avg] {
 	return NumericColumn[S, sql.Null[C], C, Sum, Avg]{Column: NullableColumn[S, C](table, name)}
 }
@@ -49,18 +51,22 @@ func (c NumericColumn[S, V, C, Sum, Avg]) Avg() Aggregate[S, sql.Null[Avg], Avg]
 	return aggregate[S, sql.Null[Avg], Avg]("AVG", c.ref)
 }
 
+// AliasNumericColumn rebinds a numeric column to an aliased generated table.
 func AliasNumericColumn[From, To, V, C, Sum, Avg any](column NumericColumn[From, V, C, Sum, Avg], alias string) NumericColumn[To, V, C, Sum, Avg] {
 	return NumericColumn[To, V, C, Sum, Avg]{Column: AliasColumn[From, To](column.Column, alias)}
 }
 
+// RebindRequiredNumeric changes a numeric column's scope for generated joins.
 func RebindRequiredNumeric[From, To, C, Sum, Avg any](column NumericColumn[From, C, C, Sum, Avg]) NumericColumn[To, C, C, Sum, Avg] {
 	return NumericColumn[To, C, C, Sum, Avg]{Column: RebindRequired[From, To](column.Column)}
 }
 
+// RebindNullableNumeric changes scope and makes a numeric column nullable.
 func RebindNullableNumeric[From, To, C, Sum, Avg any](column NumericColumn[From, C, C, Sum, Avg]) NumericColumn[To, sql.Null[C], C, Sum, Avg] {
 	return NumericColumn[To, sql.Null[C], C, Sum, Avg]{Column: RebindNullable[From, To](column.Column)}
 }
 
+// RebindExistingNullableNumeric preserves nullability while changing scope.
 func RebindExistingNullableNumeric[From, To, C, Sum, Avg any](column NumericColumn[From, sql.Null[C], C, Sum, Avg]) NumericColumn[To, sql.Null[C], C, Sum, Avg] {
 	return NumericColumn[To, sql.Null[C], C, Sum, Avg]{Column: RebindExistingNullable[From, To](column.Column)}
 }

@@ -86,6 +86,7 @@ func (sqliteRenderer) placeholder(int) string { return "?" }
 // SchemaInfo carries code-generation source metadata shared by generated tables.
 type SchemaInfo struct{ dialect Dialect }
 
+// NewSchemaInfo constructs dialect metadata for generated schemas.
 func NewSchemaInfo(dialect Dialect) SchemaInfo {
 	if dialect == nil {
 		panic("tiqq: schema dialect must not be nil")
@@ -93,6 +94,7 @@ func NewSchemaInfo(dialect Dialect) SchemaInfo {
 	return SchemaInfo{dialect: dialect}
 }
 
+// Table constructs an unqualified table reference for generated schemas.
 func (schema SchemaInfo) Table(name string) TableRef {
 	return TableRef{name: name, dialect: schema.dialect}
 }

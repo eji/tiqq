@@ -87,6 +87,52 @@ func TestMySQLBuildRendering(t *testing.T) {
 	require.Equal(t, []any{int64(8), int64(7)}, updateStatement.Args())
 }
 
+func TestMySQLReturningRejected(t *testing.T) {
+	table := NewSchemaInfo(MySQL).Table("users")
+	id := RequiredColumn[mysqlScope, int64]("users", "id")
+	tests := map[string]struct {
+		build func() error
+	}{
+		"insert": {
+			build: func() error {
+				_, err := NewInsert[mysqlScope, MySQLMarker](table, []string{"id"}, []string{"id"}, nil).
+					Values(id.Value(int64(7))).Returning(id).Build()
+				return err
+			},
+		},
+		"update": {
+			build: func() error {
+				_, err := (UpdateQuery[mysqlScope]{table: tableSource{ref: table}}).
+					Set(id.To(int64(8))).AllRows().Returning(id).Build()
+				return err
+			},
+		},
+		"delete": {
+			build: func() error {
+				_, err := (DeleteQuery[mysqlScope]{table: tableSource{ref: table}}).
+					AllRows().Returning(id).Build()
+				return err
+			},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.EqualError(t, test.build(), "tiqq: mysql does not support RETURNING")
+		})
+	}
+}
+
+func TestSQLiteReturningBuild(t *testing.T) {
+	table := NewSchemaInfo(SQLite).Table("users")
+	id := RequiredColumn[mysqlScope, int64]("users", "id")
+	statement, err := NewInsert[mysqlScope, SQLiteMarker](table, []string{"id"}, []string{"id"}, nil).
+		Values(id.Value(int64(7))).Returning(id).Build()
+
+	require.NoError(t, err)
+	require.Equal(t, `INSERT INTO "users" ("id") VALUES (?) RETURNING "id"`, statement.SQL())
+}
+
 func TestQueryRendererRejectsMixedDialects(t *testing.T) {
 	postgres := NewSchemaInfo(PostgreSQL)
 	other := NewSchemaInfo(testDialect{renderer: testRenderer{dialectName: "other"}})

@@ -10,6 +10,8 @@ type DeleteQuery[S any] struct {
 	table      tableSource
 	predicates []Predicate
 	allRows    bool
+	returning  []columnRef
+	returns    bool
 }
 
 // NewDelete constructs a DELETE for a generated table.
@@ -28,6 +30,13 @@ func (query DeleteQuery[S]) AllRows() DeleteQuery[S] {
 	return query
 }
 
+// Returning selects values produced by the deleted rows.
+func (query DeleteQuery[S]) Returning(columns ...Selection) DeleteQuery[S] {
+	query.returns = true
+	query.returning = selections(columns)
+	return query
+}
+
 func (query DeleteQuery[S]) Build() (Statement, error) {
 	renderer, err := rendererFor(query.table.ref)
 	if err != nil {
@@ -35,6 +44,9 @@ func (query DeleteQuery[S]) Build() (Statement, error) {
 	}
 	if len(query.predicates) == 0 && !query.allRows {
 		return Statement{}, fmt.Errorf("tiqq: DELETE requires WHERE or AllRows")
+	}
+	if err := validateReturning(renderer, query.table.ref, query.returning, query.returns); err != nil {
+		return Statement{}, err
 	}
 	allowed := map[string]bool{query.table.ref.qualifier(): true}
 	for _, predicate := range query.predicates {
@@ -63,7 +75,8 @@ func (query DeleteQuery[S]) Build() (Statement, error) {
 			args = append(args, values...)
 		}
 	}
-	return newStatement(builder.String(), args, nil), nil
+	renderReturning(renderer, &builder, query.returning)
+	return newStatement(builder.String(), args, query.returning), nil
 }
 
 // MustBuild builds a DELETE statement and panics if validation fails.

@@ -196,6 +196,20 @@ q := UserTable.Insert().
 stmt, err := q.Build()
 ```
 
+PostgreSQL and SQLite support typed `RETURNING` on INSERT, UPDATE, and DELETE:
+
+```go
+q := UserTable.Insert().
+	Values(UserTable.Name.Value("Alice")).
+	Returning(UserTable.ID, UserTable.Name)
+
+stmt, err := q.Build()
+```
+
+The returned columns become the statement projection, so `ScanRow` and typed
+`row.Get(UserTable.ID)` work as they do for SELECT. MySQL rejects `RETURNING`
+at `Build` because the dialect does not support it.
+
 Execute with `database/sql` and pass its row together with the built statement
 to `ScanRow`:
 

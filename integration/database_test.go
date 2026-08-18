@@ -122,6 +122,21 @@ CREATE TABLE addresses (
 		table.ref, []string{"id", "name"}, []string{"id", "name"}, nil,
 	).Values(table.columns.ID.Value(int64(7)), table.columns.Name.Value("Alice")).MustBuild()
 	assertProbeRoundTrip(t, database, insert, table)
+	returning := tiqq.NewInsert[probeScope, tiqq.PostgreSQLMarker](
+		table.ref, []string{"id", "name"}, []string{"id", "name"}, nil,
+	).Values(
+		table.columns.ID.Value(int64(8)), table.columns.Name.Value("Bob"),
+	).Returning(table.columns.ID, table.columns.Name).MustBuild()
+	returnedRow, err := tiqq.ScanRow(
+		database.QueryRow(returning.SQL(), returning.Args()...), returning,
+	)
+	returnedID, idErr := returnedRow.Get(table.columns.ID)
+	returnedName, nameErr := returnedRow.Get(table.columns.Name)
+	require.NoError(t, err)
+	require.NoError(t, idErr)
+	require.NoError(t, nameErr)
+	require.Equal(t, int64(8), returnedID)
+	require.Equal(t, "Bob", returnedName)
 }
 
 func TestMySQLIntrospectionAndCodeGeneration(t *testing.T) {

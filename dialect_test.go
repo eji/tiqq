@@ -61,6 +61,17 @@ func TestDialectRenderer(t *testing.T) {
 	}
 }
 
+func TestPostgreSQLSchemaQualifiedTableRendering(t *testing.T) {
+	table := NewSchemaInfo(PostgreSQL).TableInSchema(`account"ing`, "users")
+	id := RequiredColumn[struct{}, int64]("users", "id")
+
+	statement := NewQuery(source{tables: []tableSource{{ref: table}}}).
+		Select(id).
+		MustBuild()
+
+	require.Equal(t, `SELECT "users"."id" FROM "account""ing"."users"`, statement.SQL())
+}
+
 type mysqlScope struct{}
 
 func TestMySQLBuildRendering(t *testing.T) {

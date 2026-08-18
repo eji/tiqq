@@ -7,6 +7,7 @@ import (
 
 // TableRef identifies one table occurrence in a query.
 type TableRef struct {
+	schema  string
 	name    string
 	alias   string
 	dialect Dialect
@@ -556,6 +557,10 @@ func queryRenderer(tables []tableSource) (sqlRenderer, error) {
 }
 
 func renderTable(renderer sqlRenderer, builder *strings.Builder, table TableRef) {
+	if table.schema != "" {
+		builder.WriteString(renderer.quoteIdentifier(table.schema))
+		builder.WriteByte('.')
+	}
 	builder.WriteString(renderer.quoteIdentifier(table.name))
 	if table.alias != "" {
 		builder.WriteString(" AS ")

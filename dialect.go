@@ -97,6 +97,12 @@ func (schema SchemaInfo) Table(name string) TableRef {
 	return TableRef{name: name, dialect: schema.dialect}
 }
 
+// TableInSchema constructs a schema-qualified table reference. It is primarily
+// intended for generated PostgreSQL schemas.
+func (schema SchemaInfo) TableInSchema(schemaName, tableName string) TableRef {
+	return TableRef{schema: schemaName, name: tableName, dialect: schema.dialect}
+}
+
 func rendererFor(table TableRef) (sqlRenderer, error) {
 	if table.dialect == nil {
 		return nil, fmt.Errorf("tiqq: table %s has no SQL dialect", table.name)

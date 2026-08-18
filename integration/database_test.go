@@ -98,27 +98,39 @@ CREATE TABLE addresses (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id),
     address TEXT NOT NULL
+);
+CREATE SCHEMA identity;
+CREATE TABLE identity.accounts (
+    id BIGINT PRIMARY KEY
+);
+CREATE TABLE audit_logs (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES identity.accounts(id)
 );`)
 	require.NoError(t, err)
 
 	databaseSchema, err := postgresintrospect.Introspect(ctx, database, "public")
 	require.NoError(t, err)
 	require.Equal(t, schema.PostgreSQL, databaseSchema.Dialect)
-	require.Len(t, databaseSchema.Tables, 2)
+	require.Len(t, databaseSchema.Tables, 3)
 	require.Equal(t, "addresses", databaseSchema.Tables[0].Name)
-	require.Equal(t, "users", databaseSchema.Tables[1].Name)
+	require.Equal(t, "audit_logs", databaseSchema.Tables[1].Name)
+	require.Equal(t, "users", databaseSchema.Tables[2].Name)
 	require.Equal(t, []string{"user_id"}, databaseSchema.Tables[0].ForeignKeys[0].Columns)
 	require.Equal(t, "users", databaseSchema.Tables[0].ForeignKeys[0].ReferencedTable)
-	require.Equal(t, "uuid", databaseSchema.Tables[1].Columns[1].DBType)
-	require.Equal(t, "numeric", databaseSchema.Tables[1].Columns[3].DBType)
-	require.Equal(t, "jsonb", databaseSchema.Tables[1].Columns[4].DBType)
-	require.Equal(t, "timestamptz", databaseSchema.Tables[1].Columns[5].DBType)
+	require.Equal(t, "identity", databaseSchema.Tables[1].ForeignKeys[0].ReferencedSchema)
+	require.Equal(t, "accounts", databaseSchema.Tables[1].ForeignKeys[0].ReferencedTable)
+	require.Equal(t, "uuid", databaseSchema.Tables[2].Columns[1].DBType)
+	require.Equal(t, "numeric", databaseSchema.Tables[2].Columns[3].DBType)
+	require.Equal(t, "jsonb", databaseSchema.Tables[2].Columns[4].DBType)
+	require.Equal(t, "timestamptz", databaseSchema.Tables[2].Columns[5].DBType)
 
 	generated, err := codegen.Generate(databaseSchema, codegen.Config{Package: "dbschema"})
 	require.NoError(t, err)
 	require.Contains(t, string(generated), "tiqq.Column[UserScope, uuid.UUID, uuid.UUID]")
 	require.Contains(t, string(generated), "tiqq.Column[UserScope, sql.Null[jsontext.Value], jsontext.Value]")
 	require.Contains(t, string(generated), "tiqq.Column[UserScope, time.Time, time.Time]")
+	require.NotContains(t, string(generated), `ReferencedTable: "accounts"`)
 	_, err = database.Exec(`INSERT INTO users (external_id, name, balance, payload, created_at) VALUES
 ('01890a5d-ac96-774b-bcce-b302099a8057', 'Typed', 12.34, '{"active":true}', '2026-08-18T00:00:00Z')`)
 	require.NoError(t, err)

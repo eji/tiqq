@@ -95,6 +95,49 @@ func TestGenerateValidation(t *testing.T) {
 	}
 }
 
+func TestGenerateOmitsExternalSchemaForeignKeys(t *testing.T) {
+	database := schema.Schema{Dialect: schema.PostgreSQL, Name: "accounting", Tables: []schema.Table{{
+		Schema: "accounting",
+		Name:   "orders",
+		Columns: []schema.Column{
+			{Name: "id", DBType: "int8"},
+			{Name: "user_id", DBType: "int8"},
+		},
+		ForeignKeys: []schema.ForeignKey{
+			{
+				Name: "orders_user_id_fkey", Columns: []string{"user_id"},
+				ReferencedSchema: "public", ReferencedTable: "users", ReferencedColumns: []string{"id"},
+			},
+		},
+	}}}
+
+	generated, err := codegen.Generate(database, codegen.Config{Package: "dbschema"})
+
+	require.NoError(t, err)
+	require.Contains(t, string(generated), `tiqqSchema.TableInSchema("accounting", "orders")`)
+	require.Contains(t, string(generated), `}, []tiqq.ForeignKey{})`)
+	require.NotContains(t, string(generated), `ReferencedTable: "users"`)
+}
+
+func TestGenerateRetainsSameSchemaForeignKeys(t *testing.T) {
+	database := schema.Schema{Dialect: schema.PostgreSQL, Name: "accounting", Tables: []schema.Table{
+		{Schema: "accounting", Name: "users", Columns: []schema.Column{{Name: "id", DBType: "int8"}}},
+		{
+			Schema: "accounting", Name: "orders",
+			Columns: []schema.Column{{Name: "user_id", DBType: "int8"}},
+			ForeignKeys: []schema.ForeignKey{{
+				Name: "orders_user_id_fkey", Columns: []string{"user_id"},
+				ReferencedSchema: "accounting", ReferencedTable: "users", ReferencedColumns: []string{"id"},
+			}},
+		},
+	}}
+
+	generated, err := codegen.Generate(database, codegen.Config{Package: "dbschema"})
+
+	require.NoError(t, err)
+	require.Contains(t, string(generated), `ReferencedTable: "users"`)
+}
+
 func TestGeneratePostgreSQLSchemaQualifiedTable(t *testing.T) {
 	generated, err := codegen.Generate(schema.Schema{
 		Dialect: schema.PostgreSQL,

@@ -80,7 +80,7 @@ func (query InsertQuery[S, D]) Build() (Statement, error) {
 		}
 		for _, required := range query.required {
 			if !seen[required] {
-				return Statement{}, fmt.Errorf("tiqq: INSERT requires column %s", required)
+				return Statement{}, fmt.Errorf("tiqq: required INSERT column %s.%s is missing from row %d", query.table.name, required, rowIndex+1)
 			}
 		}
 	}

@@ -76,7 +76,7 @@ func TestInsertBuildValidation(t *testing.T) {
 				_, err := UserTable.Insert().Values(UserTable.ID.Value(int64(1))).Build()
 				return err
 			},
-			want: "tiqq: INSERT requires column name",
+			want: "tiqq: required INSERT column users.name is missing from row 1",
 		},
 		"column is duplicated": {
 			build: func() error {

@@ -42,7 +42,14 @@ func Generate(database schema.Schema, config Config) ([]byte, error) {
 	} else if dialect == schema.SQLite {
 		dialectPackage, dialectName = "sqlite", "SQLite"
 	}
-	fmt.Fprintf(&output, "import (\n\t\"database/sql\"\n\n\t\"github.com/eji/tiqq\"\n\t\"github.com/eji/tiqq/%s\"\n)\n\n", dialectPackage)
+	output.WriteString("import (\n\t\"database/sql\"\n")
+	if schemaUsesType(tables, dialect, "jsontext.Value") {
+		output.WriteString("\t\"encoding/json/jsontext\"\n")
+	}
+	if schemaUsesType(tables, dialect, "uuid.UUID") {
+		output.WriteString("\t\"uuid\"\n")
+	}
+	fmt.Fprintf(&output, "\n\t\"github.com/eji/tiqq\"\n\t\"github.com/eji/tiqq/%s\"\n)\n\n", dialectPackage)
 	fmt.Fprintf(&output, "var tiqqSchema = tiqq.NewSchemaInfo(tiqq.%s)\n\n", dialectName)
 	for _, table := range tables {
 		writeTable(&output, table, dialect)
@@ -52,6 +59,17 @@ func Generate(database schema.Schema, config Config) ([]byte, error) {
 		return nil, fmt.Errorf("codegen: format generated source: %w", err)
 	}
 	return formatted, nil
+}
+
+func schemaUsesType(tables []schema.Table, dialect schema.Dialect, typeName string) bool {
+	for _, table := range tables {
+		for _, column := range table.Columns {
+			if goType(dialect, column) == typeName {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validateForeignKeys(tables []schema.Table) error {
@@ -198,6 +216,9 @@ func columnType(dialect schema.Dialect, scope string, column schema.Column, oute
 }
 
 func numericAggregateTypes(dialect schema.Dialect, databaseType string) (string, string, bool) {
+	if isUUIDType(dialect, databaseType) || isJSONType(databaseType) {
+		return "", "", false
+	}
 	if dialect == schema.SQLite {
 		switch sqliteAffinity(databaseType) {
 		case "integer":
@@ -236,6 +257,12 @@ func numericAggregateTypes(dialect schema.Dialect, databaseType string) (string,
 
 func goType(dialect schema.Dialect, column schema.Column) string {
 	databaseType := column.DBType
+	if isUUIDType(dialect, databaseType) {
+		return "uuid.UUID"
+	}
+	if isJSONType(databaseType) {
+		return "jsontext.Value"
+	}
 	if dialect == schema.SQLite {
 		switch sqliteAffinity(databaseType) {
 		case "integer":
@@ -306,6 +333,15 @@ func goType(dialect schema.Dialect, column schema.Column) string {
 	default:
 		return "string"
 	}
+}
+
+func isUUIDType(dialect schema.Dialect, databaseType string) bool {
+	return (dialect == schema.PostgreSQL || dialect == schema.SQLite) && strings.EqualFold(strings.TrimSpace(databaseType), "uuid")
+}
+
+func isJSONType(databaseType string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(databaseType))
+	return normalized == "json" || normalized == "jsonb"
 }
 
 func sqliteAffinity(databaseType string) string {

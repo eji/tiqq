@@ -91,6 +91,19 @@ generator CLI; query execution remains the application's responsibility.
 SQLite columns with NUMERIC affinity generate `tiqq.Decimal`; they are never
 silently reduced to `float64` by tiqq.
 
+Go 1.27 standard-library types are used for UUID and raw JSON columns:
+
+```text
+PostgreSQL uuid       -> uuid.UUID
+PostgreSQL json/jsonb -> jsontext.Value
+MySQL json            -> jsontext.Value
+SQLite UUID/JSON      -> uuid.UUID / jsontext.Value
+```
+
+`Statement.Args` converts these values to driver-safe text or bytes, and
+`ScanRow` accepts the string, byte, and 16-byte UUID representations returned
+by database/sql and pgx drivers.
+
 For a statically defined query that should fail fast during development, use
 `q.MustBuild()`; it panics with the same validation error.
 

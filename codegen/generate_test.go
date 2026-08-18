@@ -271,3 +271,67 @@ func TestGenerateSQLite(t *testing.T) {
 	require.Contains(t, source, "func (table MetricTableDef) Insert() sqlite.InsertQuery[MetricScope]")
 	require.Contains(t, source, "tiqq.NewInsert[MetricScope, tiqq.SQLiteMarker]")
 }
+
+func TestGenerateStandardUUIDAndJSONTypes(t *testing.T) {
+	tests := map[string]struct {
+		dialect      schema.Dialect
+		columns      []schema.Column
+		wantTypes    []string
+		unwantedType string
+	}{
+		"postgres": {
+			dialect: schema.PostgreSQL,
+			columns: []schema.Column{
+				{Name: "id", DBType: "uuid"},
+				{Name: "payload", DBType: "jsonb", Nullable: true},
+			},
+			wantTypes: []string{
+				`"encoding/json/jsontext"`, `"uuid"`,
+				"tiqq.Column[EventScope, uuid.UUID, uuid.UUID]",
+				"tiqq.Column[EventScope, sql.Null[jsontext.Value], jsontext.Value]",
+			},
+			unwantedType: `"github.com/eji/tiqq/mysql"`,
+		},
+		"mysql": {
+			dialect: schema.MySQL,
+			columns: []schema.Column{
+				{Name: "id", DBType: "varchar"},
+				{Name: "payload", DBType: "json"},
+			},
+			wantTypes: []string{
+				`"encoding/json/jsontext"`,
+				"tiqq.Column[EventScope, jsontext.Value, jsontext.Value]",
+			},
+			unwantedType: `"uuid"`,
+		},
+		"sqlite declared types": {
+			dialect: schema.SQLite,
+			columns: []schema.Column{
+				{Name: "id", DBType: "uuid"},
+				{Name: "payload", DBType: "json"},
+			},
+			wantTypes: []string{
+				`"encoding/json/jsontext"`, `"uuid"`,
+				"tiqq.Column[EventScope, uuid.UUID, uuid.UUID]",
+				"tiqq.Column[EventScope, jsontext.Value, jsontext.Value]",
+			},
+			unwantedType: `"github.com/eji/tiqq/postgres"`,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			generated, err := codegen.Generate(schema.Schema{
+				Dialect: test.dialect,
+				Tables:  []schema.Table{{Name: "events", Columns: test.columns}},
+			}, codegen.Config{Package: "dbschema"})
+			source := string(generated)
+
+			require.NoError(t, err)
+			for _, want := range test.wantTypes {
+				require.Contains(t, source, want)
+			}
+			require.NotContains(t, source, test.unwantedType)
+		})
+	}
+}

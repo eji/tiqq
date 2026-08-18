@@ -89,12 +89,19 @@ func validateForeignKeys(tables []schema.Table) error {
 	}
 	for _, table := range tables {
 		for _, foreignKey := range table.ForeignKeys {
+			if foreignKeyIsExternal(table, foreignKey) {
+				continue
+			}
 			if !known[foreignKey.ReferencedTable] {
 				return fmt.Errorf("codegen: foreign key %s references unknown table %s", foreignKey.Name, foreignKey.ReferencedTable)
 			}
 		}
 	}
 	return nil
+}
+
+func foreignKeyIsExternal(table schema.Table, foreignKey schema.ForeignKey) bool {
+	return table.Schema != "" && foreignKey.ReferencedSchema != "" && table.Schema != foreignKey.ReferencedSchema
 }
 
 var generatedTableMethods = map[string]bool{
@@ -198,6 +205,9 @@ func writeTable(output *bytes.Buffer, table schema.Table, dialect schema.Dialect
 	}
 	output.WriteString("}, []tiqq.ForeignKey{")
 	for _, foreignKey := range table.ForeignKeys {
+		if foreignKeyIsExternal(table, foreignKey) {
+			continue
+		}
 		fmt.Fprintf(output, "{Columns: %#v, ReferencedTable: %q, ReferencedColumns: %#v},", foreignKey.Columns, foreignKey.ReferencedTable, foreignKey.ReferencedColumns)
 	}
 	output.WriteString("})\n}\n\n")

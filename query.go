@@ -202,23 +202,23 @@ func (from source) withJoin(kind string, right tableSource) source {
 }
 
 func (joined Joined[L, R, NL, NR]) Where(predicates ...Predicate) Query {
-	return NewQuery(joined.source).Where(predicates...)
+	return newQuery(joined.source).Where(predicates...)
 }
 
 func (joined Joined[L, R, NL, NR]) Select(columns ...Selection) Query {
-	return NewQuery(joined.source).Select(columns...)
+	return newQuery(joined.source).Select(columns...)
 }
 
 func (joined Joined[L, R, NL, NR]) GroupBy(columns ...Selection) Query {
-	return NewQuery(joined.source).GroupBy(columns...)
+	return newQuery(joined.source).GroupBy(columns...)
 }
 
 func NewTableQuery[C, NC any](table TableLike[C, NC]) Query {
 	info := table.TiqqTableInfo()
-	return NewQuery(source{tables: []tableSource{tableSourceOf(info)}})
+	return newQuery(source{tables: []tableSource{tableSourceOf(info)}})
 }
 
-func NewQuery(from source) Query { return Query{from: from} }
+func newQuery(from source) Query { return Query{from: from} }
 
 // Query builds a SELECT while retaining typed projection metadata.
 type Query struct {

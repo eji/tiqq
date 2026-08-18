@@ -65,7 +65,7 @@ func TestPostgreSQLSchemaQualifiedTableRendering(t *testing.T) {
 	table := NewSchemaInfo(PostgreSQL).TableInSchema(`account"ing`, "users")
 	id := RequiredColumn[struct{}, int64]("users", "id")
 
-	statement := NewQuery(source{tables: []tableSource{{ref: table}}}).
+	statement := newQuery(source{tables: []tableSource{{ref: table}}}).
 		Select(id).
 		MustBuild()
 
@@ -78,7 +78,7 @@ func TestMySQLBuildRendering(t *testing.T) {
 	schema := NewSchemaInfo(MySQL)
 	table := schema.Table("users")
 	id := RequiredNumericColumn[mysqlScope, int64, Decimal, Decimal]("users", "id")
-	selectStatement := NewQuery(source{tables: []tableSource{{ref: table}}}).
+	selectStatement := newQuery(source{tables: []tableSource{{ref: table}}}).
 		Where(id.Eq(int64(7))).
 		Select(id).
 		MustBuild()
@@ -175,7 +175,7 @@ func TestSelectModifiersUseDialectPlaceholders(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			table := NewSchemaInfo(test.dialect).Table("users")
 			id := RequiredNumericColumn[mysqlScope, int64, Decimal, Decimal]("users", "id")
-			statement := NewQuery(source{tables: []tableSource{{ref: table}}}).
+			statement := newQuery(source{tables: []tableSource{{ref: table}}}).
 				Select(id).Distinct().OrderBy(id.Desc()).Limit(10).Offset(5).MustBuild()
 
 			require.Equal(t, test.want, statement.SQL())
@@ -203,7 +203,7 @@ func TestOffsetWithoutLimitValidation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			table := NewSchemaInfo(test.dialect).Table("users")
 			id := RequiredNumericColumn[mysqlScope, int64, Decimal, Decimal]("users", "id")
-			_, err := NewQuery(source{tables: []tableSource{{ref: table}}}).Select(id).Offset(5).Build()
+			_, err := newQuery(source{tables: []tableSource{{ref: table}}}).Select(id).Offset(5).Build()
 
 			require.EqualError(t, err, test.want)
 		})
@@ -247,7 +247,7 @@ func TestMySQLRejectsFullJoin(t *testing.T) {
 	users := tableSource{ref: schema.Table("users")}
 	addresses := tableSource{ref: schema.Table("addresses")}
 	id := RequiredNumericColumn[mysqlScope, int64, Decimal, Decimal]("users", "id")
-	query := NewQuery(source{
+	query := newQuery(source{
 		tables: []tableSource{users, addresses},
 		joins:  []joinClause{{kind: "FULL JOIN", right: addresses}},
 	}).Select(id)

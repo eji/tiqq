@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/format"
+	"go/token"
 	"sort"
 	"strings"
 	"unicode"
@@ -21,6 +22,9 @@ func Generate(database schema.Schema, config Config) ([]byte, error) {
 	if config.Package == "" {
 		return nil, fmt.Errorf("codegen: package name is required")
 	}
+	if !token.IsIdentifier(config.Package) || token.Lookup(config.Package).IsKeyword() {
+		return nil, fmt.Errorf("codegen: invalid package name %q", config.Package)
+	}
 	dialect := database.Dialect
 	if dialect == "" {
 		dialect = schema.PostgreSQL
@@ -30,6 +34,9 @@ func Generate(database schema.Schema, config Config) ([]byte, error) {
 	}
 	tables := append([]schema.Table(nil), database.Tables...)
 	sort.Slice(tables, func(i, j int) bool { return tables[i].Name < tables[j].Name })
+	if err := validateGeneratedNames(tables); err != nil {
+		return nil, err
+	}
 	if err := validateForeignKeys(tables); err != nil {
 		return nil, err
 	}
@@ -90,6 +97,53 @@ func validateForeignKeys(tables []schema.Table) error {
 	return nil
 }
 
+var generatedTableMethods = map[string]bool{
+	"TiqqTableInfo": true, "TiqqJoinSource": true,
+	"LeftJoin": true, "InnerJoin": true, "RightJoin": true,
+	"FullJoin": true, "CrossJoin": true, "Where": true, "Select": true,
+	"GroupBy": true, "Update": true, "Delete": true, "Insert": true, "As": true,
+}
+
+func validateGeneratedNames(tables []schema.Table) error {
+	topLevel := make(map[string]string)
+	for _, table := range tables {
+		typeName, err := generatedIdentifier("table", table.Name, singular(table.Name))
+		if err != nil {
+			return err
+		}
+		for _, identifier := range []string{typeName + "Scope", typeName + "TableDef", "Nullable" + typeName + "TableDef", typeName + "Table"} {
+			if previous, exists := topLevel[identifier]; exists {
+				return fmt.Errorf("codegen: tables %q and %q generate duplicate Go identifier %s", previous, table.Name, identifier)
+			}
+			topLevel[identifier] = table.Name
+		}
+
+		fields := make(map[string]string)
+		for _, column := range table.Columns {
+			field, err := generatedIdentifier("column", column.Name, column.Name)
+			if err != nil {
+				return fmt.Errorf("codegen: table %q: %w", table.Name, err)
+			}
+			if generatedTableMethods[field] {
+				return fmt.Errorf("codegen: table %q column %q generates Go field %s, which conflicts with a generated method", table.Name, column.Name, field)
+			}
+			if previous, exists := fields[field]; exists {
+				return fmt.Errorf("codegen: table %q columns %q and %q generate duplicate Go field %s", table.Name, previous, column.Name, field)
+			}
+			fields[field] = column.Name
+		}
+	}
+	return nil
+}
+
+func generatedIdentifier(kind, databaseName, base string) (string, error) {
+	identifier := exported(base)
+	if !token.IsIdentifier(identifier) || token.Lookup(identifier).IsKeyword() {
+		return "", fmt.Errorf("codegen: %s name %q cannot be converted to a valid Go identifier", kind, databaseName)
+	}
+	return identifier, nil
+}
+
 func writeTable(output *bytes.Buffer, table schema.Table, dialect schema.Dialect) {
 	typeName := exported(singular(table.Name))
 	scope := typeName + "Scope"
@@ -104,7 +158,11 @@ func writeTable(output *bytes.Buffer, table schema.Table, dialect schema.Dialect
 		fmt.Fprintf(output, "\t%s %s\n", exported(column.Name), columnType(dialect, scope, column, true))
 	}
 	output.WriteString("}\n\n")
-	fmt.Fprintf(output, "var %sTable = %sTableDef{\n\tref: tiqqSchema.Table(%q),\n", typeName, typeName, table.Name)
+	tableConstructor := fmt.Sprintf("tiqqSchema.Table(%q)", table.Name)
+	if dialect == schema.PostgreSQL && table.Schema != "" {
+		tableConstructor = fmt.Sprintf("tiqqSchema.TableInSchema(%q, %q)", table.Schema, table.Name)
+	}
+	fmt.Fprintf(output, "var %sTable = %sTableDef{\n\tref: %s,\n", typeName, typeName, tableConstructor)
 	for _, column := range table.Columns {
 		sumType, avgType, numeric := numericAggregateTypes(dialect, column.DBType)
 		constructor := "RequiredColumn"
@@ -395,6 +453,9 @@ func singular(name string) string {
 
 func exported(name string) string {
 	parts := strings.FieldsFunc(name, func(character rune) bool { return character == '_' || character == '-' })
+	if len(parts) == 0 {
+		return ""
+	}
 	for index, part := range parts {
 		upper := strings.ToUpper(part)
 		if upper == "ID" {

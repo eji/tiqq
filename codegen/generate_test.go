@@ -64,6 +64,14 @@ func TestGenerateValidation(t *testing.T) {
 		"package is required": {
 			want: "codegen: package name is required",
 		},
+		"package must be a Go identifier": {
+			config: codegen.Config{Package: "invalid-package"},
+			want:   `codegen: invalid package name "invalid-package"`,
+		},
+		"package must not be a keyword": {
+			config: codegen.Config{Package: "type"},
+			want:   `codegen: invalid package name "type"`,
+		},
 		"referenced table must exist": {
 			config: codegen.Config{Package: "dbschema"},
 			database: schema.Schema{Tables: []schema.Table{{
@@ -82,6 +90,51 @@ func TestGenerateValidation(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			_, err := codegen.Generate(test.database, test.config)
+			require.EqualError(t, err, test.want)
+		})
+	}
+}
+
+func TestGeneratePostgreSQLSchemaQualifiedTable(t *testing.T) {
+	generated, err := codegen.Generate(schema.Schema{
+		Dialect: schema.PostgreSQL,
+		Tables:  []schema.Table{{Schema: "accounting", Name: "users", Columns: []schema.Column{{Name: "id", DBType: "int8"}}}},
+	}, codegen.Config{Package: "dbschema"})
+
+	require.NoError(t, err)
+	require.Contains(t, string(generated), `ref: tiqqSchema.TableInSchema("accounting", "users")`)
+}
+
+func TestGenerateNameCollisionValidation(t *testing.T) {
+	tests := map[string]struct {
+		database schema.Schema
+		want     string
+	}{
+		"table names": {
+			database: schema.Schema{Tables: []schema.Table{{Name: "user"}, {Name: "users"}}},
+			want:     `codegen: tables "user" and "users" generate duplicate Go identifier UserScope`,
+		},
+		"column names": {
+			database: schema.Schema{Tables: []schema.Table{{Name: "users", Columns: []schema.Column{{Name: "user-id"}, {Name: "user_id"}}}}},
+			want:     `codegen: table "users" columns "user-id" and "user_id" generate duplicate Go field UserID`,
+		},
+		"generated method": {
+			database: schema.Schema{Tables: []schema.Table{{Name: "users", Columns: []schema.Column{{Name: "select"}}}}},
+			want:     `codegen: table "users" column "select" generates Go field Select, which conflicts with a generated method`,
+		},
+		"invalid table identifier": {
+			database: schema.Schema{Tables: []schema.Table{{Name: "---"}}},
+			want:     `codegen: table name "---" cannot be converted to a valid Go identifier`,
+		},
+		"invalid column identifier": {
+			database: schema.Schema{Tables: []schema.Table{{Name: "users", Columns: []schema.Column{{Name: "---"}}}}},
+			want:     `codegen: table "users": codegen: column name "---" cannot be converted to a valid Go identifier`,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := codegen.Generate(test.database, codegen.Config{Package: "dbschema"})
 			require.EqualError(t, err, test.want)
 		})
 	}

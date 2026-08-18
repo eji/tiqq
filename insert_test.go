@@ -37,6 +37,19 @@ func TestInsertBuild(t *testing.T) {
 			wantSQL:  `INSERT INTO "users" ("id", "name") VALUES ($1, $2), ($3, $4)`,
 			wantArgs: []any{int64(1), "Alice", int64(2), "Bob"},
 		},
+		"multiple rows normalize column order": {
+			build: func() tiqq.Statement {
+				return UserTable.Insert().Values(
+					UserTable.ID.Value(int64(1)),
+					UserTable.Name.Value("Alice"),
+				).Values(
+					UserTable.Name.Value("Bob"),
+					UserTable.ID.Value(int64(2)),
+				).MustBuild()
+			},
+			wantSQL:  `INSERT INTO "users" ("id", "name") VALUES ($1, $2), ($3, $4)`,
+			wantArgs: []any{int64(1), "Alice", int64(2), "Bob"},
+		},
 		"nullable column accepts base value": {
 			build: func() tiqq.Statement {
 				return UserTable.Insert().Values(
@@ -96,18 +109,35 @@ func TestInsertBuildValidation(t *testing.T) {
 				).Values(UserTable.ID.Value(int64(2))).Build()
 				return err
 			},
-			want: "tiqq: INSERT row 2 columns do not match the first row",
+			want: "tiqq: required INSERT column users.name is missing from row 2",
 		},
-		"bulk column order must match": {
+		"bulk optional column cannot be missing": {
 			build: func() error {
 				_, err := UserTable.Insert().Values(
-					UserTable.ID.Value(int64(1)), UserTable.Name.Value("Alice"),
+					UserTable.ID.Value(int64(1)),
+					UserTable.Name.Value("Alice"),
+					UserTable.ManagerID.Value(int64(9)),
 				).Values(
-					UserTable.Name.Value("Bob"), UserTable.ID.Value(int64(2)),
+					UserTable.ID.Value(int64(2)),
+					UserTable.Name.Value("Bob"),
 				).Build()
 				return err
 			},
-			want: "tiqq: INSERT row 2 columns do not match the first row",
+			want: "tiqq: INSERT row 2 columns do not match the first row: column users.manager_id is missing",
+		},
+		"bulk optional column cannot be unexpected": {
+			build: func() error {
+				_, err := UserTable.Insert().Values(
+					UserTable.ID.Value(int64(1)),
+					UserTable.Name.Value("Alice"),
+				).Values(
+					UserTable.ID.Value(int64(2)),
+					UserTable.Name.Value("Bob"),
+					UserTable.ManagerID.Value(int64(9)),
+				).Build()
+				return err
+			},
+			want: "tiqq: INSERT row 2 columns do not match the first row: column users.manager_id is unexpected",
 		},
 		"generated column is rejected": {
 			build: func() error {

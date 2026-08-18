@@ -77,6 +77,15 @@ func TestUpdateBuildValidation(t *testing.T) {
 			},
 			want: "tiqq: UPDATE requires WHERE or AllRows",
 		},
+		"set column is duplicated across dynamic calls": {
+			build: func() error {
+				query := UserTable.Update().Set(UserTable.Name.To("Alice"))
+				query = query.Set(UserTable.Name.To("Bob"))
+				_, err := query.Where(UserTable.ID.Eq(int64(1))).Build()
+				return err
+			},
+			want: "tiqq: UPDATE SET column users.name is specified more than once",
+		},
 		"where must belong to update table": {
 			build: func() error {
 				_, err := UserTable.Update().

@@ -57,6 +57,13 @@ func (query UpdateQuery[S]) Build() (Statement, error) {
 	if err := validateColumns("SET", columns, allowed); err != nil {
 		return Statement{}, err
 	}
+	seenAssignments := make(map[string]bool, len(query.assignments))
+	for _, assignment := range query.assignments {
+		if seenAssignments[assignment.column.id] {
+			return Statement{}, fmt.Errorf("tiqq: UPDATE SET column %s is specified more than once", assignment.column.id)
+		}
+		seenAssignments[assignment.column.id] = true
+	}
 	for _, predicate := range query.predicates {
 		columns := predicateColumns(predicate)
 		if err := validateColumns("WHERE", columns, allowed); err != nil {

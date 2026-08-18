@@ -53,14 +53,14 @@ func (query InsertQuery[S, D]) Build() (Statement, error) {
 		return Statement{}, fmt.Errorf("tiqq: INSERT requires at least one value")
 	}
 	firstColumns := make([]string, len(query.rows[0]))
+	firstColumnSet := make(map[string]bool, len(firstColumns))
+	normalizedRows := make([][]InsertValue[S], len(query.rows))
 	for rowIndex, row := range query.rows {
 		if len(row) == 0 {
 			return Statement{}, fmt.Errorf("tiqq: INSERT row %d requires at least one value", rowIndex+1)
 		}
-		if len(row) != len(query.rows[0]) {
-			return Statement{}, fmt.Errorf("tiqq: INSERT row %d columns do not match the first row", rowIndex+1)
-		}
 		seen := make(map[string]bool, len(row))
+		valuesByColumn := make(map[string]InsertValue[S], len(row))
 		for columnIndex, value := range row {
 			if value.column.qualifier != query.table.qualifier() {
 				return Statement{}, fmt.Errorf("tiqq: INSERT column %s is not in query scope", value.column.id)
@@ -73,14 +73,31 @@ func (query InsertQuery[S, D]) Build() (Statement, error) {
 			}
 			if rowIndex == 0 {
 				firstColumns[columnIndex] = value.column.name
-			} else if value.column.name != firstColumns[columnIndex] {
-				return Statement{}, fmt.Errorf("tiqq: INSERT row %d columns do not match the first row", rowIndex+1)
 			}
 			seen[value.column.name] = true
+			valuesByColumn[value.column.name] = value
 		}
 		for _, required := range query.required {
 			if !seen[required] {
 				return Statement{}, fmt.Errorf("tiqq: required INSERT column %s.%s is missing from row %d", query.table.name, required, rowIndex+1)
+			}
+		}
+		if rowIndex == 0 {
+			for column := range seen {
+				firstColumnSet[column] = true
+			}
+		}
+		normalizedRows[rowIndex] = make([]InsertValue[S], len(firstColumns))
+		for columnIndex, column := range firstColumns {
+			value, found := valuesByColumn[column]
+			if !found {
+				return Statement{}, fmt.Errorf("tiqq: INSERT row %d columns do not match the first row: column %s.%s is missing", rowIndex+1, query.table.name, column)
+			}
+			normalizedRows[rowIndex][columnIndex] = value
+		}
+		for _, value := range row {
+			if !firstColumnSet[value.column.name] {
+				return Statement{}, fmt.Errorf("tiqq: INSERT row %d columns do not match the first row: column %s.%s is unexpected", rowIndex+1, query.table.name, value.column.name)
 			}
 		}
 	}
@@ -98,16 +115,16 @@ func (query InsertQuery[S, D]) Build() (Statement, error) {
 	builder.WriteString("INSERT INTO ")
 	renderTable(renderer, &builder, query.table)
 	builder.WriteString(" (")
-	for index, value := range query.rows[0] {
+	for index, value := range normalizedRows[0] {
 		if index > 0 {
 			builder.WriteString(", ")
 		}
 		builder.WriteString(renderer.quoteIdentifier(value.column.name))
 	}
 	builder.WriteString(") VALUES ")
-	args := make([]any, 0, len(query.rows)*len(query.rows[0]))
+	args := make([]any, 0, len(normalizedRows)*len(normalizedRows[0]))
 	nextArg := 1
-	for rowIndex, row := range query.rows {
+	for rowIndex, row := range normalizedRows {
 		if rowIndex > 0 {
 			builder.WriteString(", ")
 		}

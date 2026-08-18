@@ -1,12 +1,15 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help test fmt fmt-check vet check pre-commit secrets
+.PHONY: help test integration fmt fmt-check vet check pre-commit secrets
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 test: ## Run all tests
 	go test ./...
+
+integration: ## Run Docker-backed PostgreSQL and MySQL integration tests
+	go test -tags=integration ./integration
 
 fmt: ## Format Go source files
 	gofmt -w $$(find . -name '*.go' -not -path './.direnv/*')

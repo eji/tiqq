@@ -27,7 +27,13 @@ make test
 make fmt
 make vet
 make check
+make integration
 ```
+
+`make integration` requires Docker and starts pinned PostgreSQL 17 and MySQL
+8.4 containers. It verifies live-schema introspection, Go code generation,
+query execution, and typed `ScanRow` results; the regular `make test` path
+remains Docker-free.
 
 The Nix shell installs the repository pre-commit hook automatically the first
 time direnv loads it. Commits then run Gitleaks against staged changes. Both

@@ -47,6 +47,7 @@ type TableInfo[C, NC any] struct {
 	foreignKeys []ForeignKey
 }
 
+// NewTableInfo constructs table metadata for generated code.
 func NewTableInfo[C, NC any](ref TableRef, required C, nullable NC, foreignKeys []ForeignKey) TableInfo[C, NC] {
 	return TableInfo[C, NC]{
 		ref: ref, required: required, nullable: nullable,
@@ -72,6 +73,7 @@ type JoinSource[C, NC any] interface {
 	TiqqJoinSource() JoinSourceInfo[C, NC]
 }
 
+// TableJoinSource converts generated table metadata into a join source.
 func TableJoinSource[C, NC any](table TableInfo[C, NC]) JoinSourceInfo[C, NC] {
 	return JoinSourceInfo[C, NC]{
 		columns: table.required, nullable: table.nullable,
@@ -213,6 +215,7 @@ func (joined Joined[L, R, NL, NR]) GroupBy(columns ...Selection) Query {
 	return newQuery(joined.source).GroupBy(columns...)
 }
 
+// NewTableQuery starts a SELECT query from a generated or manually defined table.
 func NewTableQuery[C, NC any](table TableLike[C, NC]) Query {
 	info := table.TiqqTableInfo()
 	return newQuery(source{tables: []tableSource{tableSourceOf(info)}})

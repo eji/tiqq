@@ -14,14 +14,14 @@ The prototype supports `InnerJoin`, `LeftJoin`, `RightJoin`, `FullJoin`, and
 
 ## Development environment
 
-Nix with flakes and direnv provide the Go 1.27 RC2 toolchain automatically:
+Nix with flakes and direnv provide the Go 1.27.0 toolchain automatically:
 
 ```sh
 direnv allow
 go version
 ```
 
-The reported version must start with `go version go1.27rc2`.
+The reported version must start with `go version go1.27.0`.
 
 Common development commands are available through Make:
 
@@ -283,9 +283,8 @@ The generator emits one generic `InnerJoin` and `LeftJoin` method per table,
 plus `As` for self joins. Empty aliases are rejected immediately and duplicate
 aliases are rejected by `Build`.
 
-This prototype intentionally requires Go 1.27 generic methods. At the time of
-writing, Go 1.27 is not yet generally released, so use a Go 1.27 prerelease
-toolchain. Execution remains owned by `database/sql` or pgx.
+This prototype intentionally requires Go 1.27 generic methods. Execution
+remains owned by `database/sql` or pgx.
 
 To generate typed Go directly from the live PostgreSQL schema, keep the DSN in
 an environment variable and use the `postgres` subcommand:
